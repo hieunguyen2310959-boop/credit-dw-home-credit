@@ -1,0 +1,18 @@
+{
+  "view": "mart.application_features_v1",
+  "join_key": "application_id",
+  "predictors": [
+    "amt_income_total", "amt_credit", "amt_annuity", "credit_income_ratio",
+    "age_years", "employment_days", "income_type", "education_level",
+    "contract_type_name", "ext_source_1", "ext_source_2", "ext_source_3",
+    "previous_application_count", "previous_approved_count", "previous_refused_count",
+    "previous_approval_rate"
+  ],
+  "label_source": "dw.fact_application.target",
+  "excluded_from_predictors": ["application_id", "target", "data_source", "etl_run_id"],
+  "notes": [
+    "Money and income units follow source; credit_income_ratio is not DTI.",
+    "Previous counts only describe eligible history in imported sources.",
+    "Fit imputation, encoding and scaling on the training split only."
+  ]
+}
