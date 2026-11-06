@@ -1,0 +1,86 @@
+{
+  "application_id": 100009,
+  "is_hypothetical": true,
+  "persisted": false,
+  "changed_inputs": {
+    "amt_income_total": {
+      "from": 171000.0,
+      "to": 256500.0
+    },
+    "credit_income_ratio": {
+      "from": 9.127052631578948,
+      "to": 6.084701754385965
+    }
+  },
+  "changed_policy": {
+    "review_threshold": {
+      "from": 0.1,
+      "to": 0.08
+    },
+    "decline_threshold": {
+      "from": 0.25,
+      "to": 0.25
+    }
+  },
+  "original": {
+    "risk_score": 0.014205655714429291,
+    "risk_band": "LOW",
+    "recommendation": "APPROVE_SIMULATION",
+    "policy_version": "policy_v1_illustrative",
+    "reason_codes": [
+      "SCORE_BELOW_REVIEW_THRESHOLD",
+      "MODEL_FACTOR_DOWN:ext_source_1",
+      "MODEL_FACTOR_DOWN:ext_source_2",
+      "MODEL_FACTOR_DOWN:education_level"
+    ],
+    "model_factors": [
+      {
+        "feature": "ext_source_1",
+        "log_odds_contribution": -0.5841754636702352,
+        "direction": "lowers_risk"
+      },
+      {
+        "feature": "ext_source_2",
+        "log_odds_contribution": -0.4353219505683522,
+        "direction": "lowers_risk"
+      },
+      {
+        "feature": "education_level",
+        "log_odds_contribution": -0.23121014354811498,
+        "direction": "lowers_risk"
+      }
+    ]
+  },
+  "scenario": {
+    "risk_score": 0.014018998320879815,
+    "risk_band": "LOW",
+    "recommendation": "APPROVE_SIMULATION",
+    "policy_version": "policy_v1_illustrative+what_if",
+    "reason_codes": [
+      "SCORE_BELOW_REVIEW_THRESHOLD",
+      "MODEL_FACTOR_DOWN:ext_source_1",
+      "MODEL_FACTOR_DOWN:ext_source_2",
+      "MODEL_FACTOR_DOWN:education_level"
+    ],
+    "model_factors": [
+      {
+        "feature": "ext_source_1",
+        "log_odds_contribution": -0.5841754636702352,
+        "direction": "lowers_risk"
+      },
+      {
+        "feature": "ext_source_2",
+        "log_odds_contribution": -0.4353219505683522,
+        "direction": "lowers_risk"
+      },
+      {
+        "feature": "education_level",
+        "log_odds_contribution": -0.23121014354811498,
+        "direction": "lowers_risk"
+      }
+    ]
+  },
+  "score_delta": -0.0001866573935494758,
+  "recommendation_changed": false,
+  "note": "Ket qua gia dinh (hypothetical), khong ghi vao du lieu goc va khong phai quan he nhan qua; chi doi nguong policy thi diem model khong doi."
+}

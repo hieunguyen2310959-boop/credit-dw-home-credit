@@ -13,3 +13,5 @@ data/raw/
 data/processed/
 artifacts/
 !artifacts/.gitkeep
+ml_outputs/
+.ipynb_checkpoints/

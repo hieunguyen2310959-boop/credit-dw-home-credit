@@ -1,0 +1,13 @@
+{
+  "status": "not_ready",
+  "application_id": 100009,
+  "model_run_id": null,
+  "risk_score": null,
+  "risk_band": null,
+  "recommendation": null,
+  "policy_version": "policy_v1_illustrative",
+  "reason_codes": [
+    "MODEL_NOT_READY"
+  ],
+  "feature_snapshot": null
+}

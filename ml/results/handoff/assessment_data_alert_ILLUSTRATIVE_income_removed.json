@@ -1,0 +1,60 @@
+{
+  "status": "succeeded",
+  "application_id": 100009,
+  "model_run_id": null,
+  "model_name": "logistic_regression_v1",
+  "feature_version": "application_features_v1",
+  "risk_score": 0.016182917192721094,
+  "risk_band": "LOW",
+  "recommendation": "REVIEW",
+  "policy_version": "policy_v1_illustrative",
+  "reason_codes": [
+    "SCORE_BELOW_REVIEW_THRESHOLD",
+    "DATA_ALERT_FORCES_REVIEW",
+    "MISSING_CRITICAL_AMT_INCOME_TOTAL",
+    "MODEL_FACTOR_DOWN:ext_source_1",
+    "MODEL_FACTOR_DOWN:ext_source_2",
+    "MODEL_FACTOR_DOWN:education_level"
+  ],
+  "alerts": [
+    {
+      "code": "MISSING_CRITICAL_AMT_INCOME_TOTAL",
+      "severity": "high"
+    }
+  ],
+  "model_factors": [
+    {
+      "feature": "ext_source_1",
+      "log_odds_contribution": -0.5841754636702352,
+      "direction": "lowers_risk"
+    },
+    {
+      "feature": "ext_source_2",
+      "log_odds_contribution": -0.4353219505683522,
+      "direction": "lowers_risk"
+    },
+    {
+      "feature": "education_level",
+      "log_odds_contribution": -0.23121014354811498,
+      "direction": "lowers_risk"
+    }
+  ],
+  "feature_snapshot": {
+    "amt_income_total": null,
+    "amt_credit": 1560726.0,
+    "amt_annuity": 41301.0,
+    "credit_income_ratio": null,
+    "age_years": 37.72210814510609,
+    "employment_days": 3130,
+    "income_type": "Commercial associate",
+    "education_level": "Higher education",
+    "contract_type_name": "Cash loans",
+    "ext_source_1": 0.7747614130547695,
+    "ext_source_2": 0.7239998516953141,
+    "ext_source_3": 0.4920600938649263,
+    "previous_application_count": 7,
+    "previous_approved_count": 7,
+    "previous_refused_count": 0,
+    "previous_approval_rate": 1.0
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "contract": "assessment-v1",
+  "owner": "B (ML/DSS) -> consumer C (FastAPI)",
+  "endpoints": {
+    "POST /applications/{application_id}/assessments": {
+      "body": "none (application_id lay tu URL; feature doc tu mart.application_features_v1)",
+      "calls": "credit_ml.inference.assess(bundle, application_id, features_row, model_run_id=...)",
+      "persist": "INSERT ml.assessments bang credit_ml.inference.to_db_row(result) trong 1 transaction"
+    },
+    "POST /applications/{application_id}/what-if": {
+      "body": {"income": "number >= 0, tuy chon", "review_threshold": "0<x<decline, tuy chon", "decline_threshold": "review<x<1, tuy chon"},
+      "calls": "credit_ml.whatif.what_if(bundle, application_id, features_row, income=..., review_threshold=..., decline_threshold=...)",
+      "persist": "KHONG ghi gi (is_hypothetical=true, persisted=false)"
+    },
+    "GET /models/metrics": {
+      "returns": "model_manifest.json -> evaluation_metrics (+ model_name, feature_version, trained_at, policy)"
+    }
+  },
+  "success_response": {
+    "status": "succeeded",
+    "application_id": "int", "model_run_id": "int", "model_name": "str", "feature_version": "str",
+    "risk_score": "float [0,1] - uoc luong cho lop TARGET=1; cao hon = rui ro cao hon",
+    "risk_band": "LOW | MEDIUM | HIGH",
+    "recommendation": "APPROVE_SIMULATION | REVIEW | DECLINE_SIMULATION (mo phong)",
+    "policy_version": "str",
+    "reason_codes": ["SCORE_* | DATA_ALERT_FORCES_REVIEW | MISSING_CRITICAL_* | ... | MODEL_FACTOR_UP:<feature> | MODEL_FACTOR_DOWN:<feature>"],
+    "alerts": [{"code": "str", "severity": "high | info"}],
+    "model_factors": [{"feature": "str", "log_odds_contribution": "float", "direction": "raises_risk | lowers_risk"}],
+    "feature_snapshot": "16 predictor, thieu = null, khong co TARGET"
+  },
+  "error_mapping": {
+    "404": "application_id khong co trong mart.application_features_v1 (do API xu ly)",
+    "422": "credit_ml.inference.InvalidFeatures (.codes: FORBIDDEN_KEY, UNKNOWN_KEY, MISSING_KEY, INVALID_TYPE, NON_FINITE, NEGATIVE_VALUE, OUT_OF_RANGE, INVALID_WHATIF_*)",
+    "503": "credit_ml.inference.ModelNotReady hoac chua co model_run -> body = not_ready_result(...); KHONG INSERT"
+  },
+  "db_rules": {
+    "succeeded": "bat buoc risk_score, risk_band, recommendation",
+    "failed": "chi khi da chon model_run_id; risk_score/band/recommendation = NULL; reason_codes khong rong",
+    "not_ready": "khong ghi vao ml.assessments (model_run_id NOT NULL)"
+  },
+  "note": "Tai lieu nhom dung ten risk_probability; DB va code dung risk_score. Thong nhat mot ten khi chot openapi.yaml."
+}

@@ -1,0 +1,30 @@
+{
+  "status": "failed",
+  "application_id": 100009,
+  "model_run_id": 1,
+  "risk_score": null,
+  "risk_band": null,
+  "recommendation": null,
+  "policy_version": "policy_v1_illustrative",
+  "reason_codes": [
+    "INVALID_FEATURES:FORBIDDEN_KEY:target"
+  ],
+  "feature_snapshot": {
+    "amt_income_total": 171000.0,
+    "amt_credit": 1560726.0,
+    "amt_annuity": 41301.0,
+    "credit_income_ratio": 9.127052631578948,
+    "age_years": 37.72210814510609,
+    "employment_days": 3130.0,
+    "income_type": "Commercial associate",
+    "education_level": "Higher education",
+    "contract_type_name": "Cash loans",
+    "ext_source_1": 0.7747614130547695,
+    "ext_source_2": 0.7239998516953141,
+    "ext_source_3": 0.4920600938649263,
+    "previous_application_count": 7,
+    "previous_approved_count": 7,
+    "previous_refused_count": 0,
+    "previous_approval_rate": 1.0
+  }
+}

@@ -1,6 +1,6 @@
 # Home Credit — Database cho BTL CO4031
 
-Phần **database + ETL** theo bản đề xuất của nhóm. PostgreSQL, chạy trực tiếp Windows, **không Docker**. Chưa có frontend/API hoặc mô hình ML đã train.
+Phần **database + ETL** theo bản đề xuất của nhóm. PostgreSQL, chạy trực tiếp Windows, **không Docker**. Phần ML/DSS (người 2) nằm ở `ml/`, xem `ml/README.md`. Chưa có frontend/API.
 
 ## Đã có
 
@@ -11,7 +11,7 @@ Phần **database + ETL** theo bản đề xuất của nhóm. PostgreSQL, chạ
 - Ràng buộc PK/FK/UNIQUE/CHECK; snapshot không có nhãn; điểm hợp lệ; chọn kết quả thành công mới nhất, có tie-break theo ID.
 - SQL thống kê/OLAP, fixture **SYNTHETIC**, kiểm thử tích hợp trên PostgreSQL thật.
 
-**Chưa làm:** train/baseline/inference ML, API/React, `dw.fact_previous_application`, `app.credit_decisions`. Hai bảng cuối là tùy chọn trong đề xuất. Không đăng ký model hoặc sinh assessment giả trong lệnh demo.
+**Chưa làm:** API/React, `dw.fact_previous_application`, `app.credit_decisions`. Hai bảng cuối là tùy chọn trong đề xuất. Không đăng ký model hoặc sinh assessment giả trong lệnh demo.
 
 ## 1. Cài và tạo database trên Windows
 
@@ -101,7 +101,11 @@ View latest lấy **lần thành công mới nhất**; lỗi mới hơn không l
 - Giá trị tiền âm và external score ngoài [0,1] giữ trong staging, chuyển NULL ở DW và có thống kê cleaning. Cờ Y/N → true/false; mã lạ → NULL.
 - Date tương đối không biến thành ngày lịch giả. Với history, ngày quyết định không biết hoặc >0 không vào aggregate.
 
-## 6. Cấu trúc repo
+## 6. ML / DSS
+
+Train trên Colab, kết quả ở `ml/results/`; hướng dẫn chạy, đăng ký model (`ml/scripts/register_model.py`) và hợp đồng API ở `ml/README.md`.
+
+## 7. Cấu trúc repo
 
 ```text
 sql/001_schema.sql        # bảng, constraint, index, guard model
@@ -114,6 +118,7 @@ contracts/features-v1.json # allowlist feature, tách nhãn và metadata
 docs/database.md         # mapping thiết kế → hiện thực + ERD
 docs/proposal-original.md # nội dung đề xuất khôi phục, giữ làm căn cứ
 tests/                  # kiểm thử PostgreSQL thật
+ml/                     # ML/DSS: credit_ml, notebook Colab, scripts, tests, results
 ```
 
 Tài liệu thiết kế gốc có một số nội dung ngoài phạm vi database lần này; `docs/database.md` ghi phần đã hiện thực và giới hạn. Nguồn dữ liệu/dictionary phải được nhóm kiểm tra lại khi tải CSV thật; lần triển khai này mới chạy fixture synthetic, chưa tuyên bố kết quả full Home Credit.
