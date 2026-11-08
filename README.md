@@ -1,6 +1,11 @@
-# Home Credit — Database cho BTL CO4031
+# Home Credit — Hệ Hỗ Trợ Quyết Định Thẩm Định & Phê Duyệt Tín Dụng (CO4031)
 
-Phần **database + ETL** theo bản đề xuất của nhóm. PostgreSQL, chạy trực tiếp Windows, **không Docker**. Phần ML/DSS (người 2) nằm ở `ml/`, xem `ml/README.md`. Chưa có frontend/API.
+Đồ án môn học **Data Warehouses & Decision Support Systems (CO4031)** — HK261.  
+Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc Star Schema chuẩn Kimball, suy luận rủi ro giải thích được (Explainable ML), và giao diện vận hành thẩm định doanh nghiệp (Enterprise DSS Dashboard trên Streamlit).
+
+- **Thành viên A (Database & ETL):** Kho dữ liệu PostgreSQL 16+, pipeline ETL streaming COPY, bảo toàn manifest SHA-256, Star Schema và Data Marts.
+- **Thành viên B (Machine Learning & Scoring):** Huấn luyện mô hình Logistic Regression (ROC-AUC holdout 0.7424), chính sách phân tầng rủi ro `policy_v1_illustrative`, giải thích log-odds theo Feature Contract v1 (chi tiết tại `ml/README.md`).
+- **Thành viên C (Web Dashboard & Tích hợp DSS):** Ứng dụng Streamlit module hóa (`app/`), hỗ trợ cán bộ thẩm định (Officer) đánh giá hồ sơ 360 độ, báo cáo phân tích đa chiều OLAP, mô phỏng kịch bản What-If thời gian thực và ghi nhật ký kiểm toán vào `app.credit_decisions`.
 
 ## Đã có
 
@@ -11,7 +16,9 @@ Phần **database + ETL** theo bản đề xuất của nhóm. PostgreSQL, chạ
 - Ràng buộc PK/FK/UNIQUE/CHECK; snapshot không có nhãn; điểm hợp lệ; chọn kết quả thành công mới nhất, có tie-break theo ID.
 - SQL thống kê/OLAP, fixture **SYNTHETIC**, kiểm thử tích hợp trên PostgreSQL thật.
 
-**Chưa làm:** API/React, `dw.fact_previous_application`, `app.credit_decisions`. Hai bảng cuối là tùy chọn trong đề xuất. Không đăng ký model hoặc sinh assessment giả trong lệnh demo.
+- **Bảng tác vụ nghiệp vụ**: `app.credit_decisions` (lưu vết quyết định phê duyệt/từ chối của Cán bộ kèm mã lý do chuẩn hóa và thời gian thực).
+- **Mô hình máy học & Scoring Engine**: Gói `credit_ml` hoàn chỉnh, artifact `logreg_v1_20261106`, hàm `assess()` và `what_if()` với 17/17 tests passing.
+- **Giao diện Web DSS (Streamlit)**: 4 Tab nghiệp vụ độc lập (Core DSS, OLAP Analytics, What-If Simulator, Audit Trail), Sticky Header, chuẩn hóa tiền tệ theo đơn vị nguồn (không gán VNĐ).
 
 ## 1. Cài và tạo database trên Windows
 
@@ -108,17 +115,64 @@ Train trên Colab, kết quả ở `ml/results/`; hướng dẫn chạy, đăng 
 ## 7. Cấu trúc repo
 
 ```text
-sql/001_schema.sql        # bảng, constraint, index, guard model
-sql/002_views.sql         # 3 giao diện đọc
-sql/003_load_dw.sql       # transform/upsert từ staging
-sql/004_analytics.sql     # SQL dashboard/OLAP và latest theo model
-scripts/database.py      # init-db / load / demo / check
-data/fixtures/           # chỉ dữ liệu SYNTHETIC
-contracts/features-v1.json # allowlist feature, tách nhãn và metadata
-docs/database.md         # mapping thiết kế → hiện thực + ERD
-docs/proposal-original.md # nội dung đề xuất khôi phục, giữ làm căn cứ
-tests/                  # kiểm thử PostgreSQL thật
-ml/                     # ML/DSS: credit_ml, notebook Colab, scripts, tests, results
+sql/                     # Database DDL: 001_schema, 002_views, 003_load_dw, 004_analytics
+scripts/database.py      # Bộ công cụ CLI quản trị DB: init-db / load / demo / check
+data/fixtures/           # Dữ liệu SYNTHETIC mẫu (không chứa dữ liệu nhạy cảm)
+contracts/features-v1.json # Hợp đồng dữ liệu 16 predictors chuẩn giữa DW - ML - Web
+ml/                      # Phân hệ ML/DSS: credit_ml, Colab notebook, model artifacts, tests
+app/                     # Phân hệ Web & Tích hợp DSS (Streamlit Enterprise)
+├── main.py              # File điều phối trung tâm (~69 dòng)
+├── styles.py            # CSS chuẩn Ngân hàng & Sticky Header ghim cố định
+├── data_adapter.py      # Tầng nạp dữ liệu, Contract v1, tải mô hình ML & assess()
+└── views/               # 4 Tab chức năng độc lập
+    ├── tab_core.py      # Tab 1: KPI Ribbon, Hàng đợi (Queue), Gauge, Drivers, Quyết định
+    ├── tab_olap.py      # Tab 2: Phân tích đa chiều OLAP & Ma trận phân bổ chéo
+    ├── tab_whatif.py    # Tab 3: Mô phỏng Kịch bản Tín dụng (What-If Simulator)
+    └── tab_audit.py     # Tab 4: Nhật ký Kiểm toán (app.credit_decisions) & Giám sát ETL
+.streamlit/config.toml   # Cấu hình giao diện Streamlit Enterprise
+docs/                    # Tài liệu đặc tả kiến trúc DWH & ERD
+tests/                   # Kiểm thử tích hợp PostgreSQL thật (Người 1)
 ```
 
 Tài liệu thiết kế gốc có một số nội dung ngoài phạm vi database lần này; `docs/database.md` ghi phần đã hiện thực và giới hạn. Nguồn dữ liệu/dictionary phải được nhóm kiểm tra lại khi tải CSV thật; lần triển khai này mới chạy fixture synthetic, chưa tuyên bố kết quả full Home Credit.
+
+
+## 8. Hướng dẫn khởi chạy Phân hệ Web & DSS (Streamlit)
+
+Phân hệ Web được xây dựng hoàn toàn bằng **Streamlit** (Python thuần, không phụ thuộc NodeJS hay Docker), kết nối trực tiếp đến mô hình ML của Người 2 và tuân thủ tuyệt đối quy ước dữ liệu của Người 1.
+
+### 8.1. Cài đặt thư viện
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -r ml/requirements-ml.txt
+.\.venv\Scripts\python.exe -m pip install streamlit plotly
+```
+
+### 8.2. Chạy ứng dụng
+Mở terminal tại thư mục gốc của repository:
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app/main.py
+```
+Ứng dụng sẽ tự động mở trên trình duyệt tại địa chỉ: `http://localhost:8501`.
+
+### 8.3. Các tính năng chính của 4 phân hệ:
+1. **Tab 1 — Thẩm định hồ sơ (Core DSS):**
+   - KPI Ribbon 4 chỉ số cấp cao: Tổng hồ sơ, tổng giá trị tín dụng đề nghị (`SUM(amt_credit)` bảo toàn đơn vị nguồn), tỷ lệ khó khăn thanh toán (`TARGET=1` tính trên mẫu số `COUNT(target)` có nhãn), tiến độ ca trực.
+   - Hàng đợi hồ sơ (Queue) dạng thẻ đóng khung độc lập, hỗ trợ tìm kiếm và lọc trạng thái.
+   - Hồ sơ 360 độ: Đồng hồ đo rủi ro Gauge chuẩn Basel, phân tích đóng góp log-odds thực tế (`model_factors`), tình hình tài chính & đòn bẩy `credit_income_ratio`, lịch sử vay quá khứ.
+   - Panel quyết định tín dụng: 3 nút dạng Segmented Button ngang hàng (`Phê duyệt`, `Xem xét thêm`, `Từ chối`), mã lý do chuẩn hóa và nút "Điền mẫu nhanh" (Autofill).
+2. **Tab 2 — Báo cáo phân tích đa chiều (OLAP Analytics):**
+   - Hỗ trợ thao tác Roll-up, Slice & Dice theo 3 chiều Dimension: *Nhóm độ tuổi (Age Band)*, *Loại hợp đồng (Contract Type)*, *Nguồn thu nhập (Income Type)*.
+   - Bảng ma trận phân bổ chéo (Cross-Tab Matrix) đồng bộ 100% với danh mục hồ sơ Data Mart, chuẩn hóa nhãn thiếu thành `Unknown`.
+3. **Tab 3 — Mô phỏng kịch bản (What-If Analysis):**
+   - Cho phép Cán bộ điều chỉnh giả định giá trị tín dụng, thu nhập và ngưỡng khẩu vị rủi ro (`review_threshold`, `decline_threshold` trong `PolicyConfig`).
+   - Tái chấm điểm thời gian thực thông qua hàm `assess()` của gói `credit_ml`, đối chiếu trực quan Before vs After mà không ghi đè dữ liệu gốc của kho.
+   - Nút "Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt" tự động liên kết dữ liệu sang Tab 1.
+4. **Tab 4 — Nhật ký kiểm toán & Giám sát vận hành (Audit Trail & ETL Runs):**
+   - Lưu vết toàn bộ quyết định tín dụng của Cán bộ (Officer) vào cấu trúc bảng `app.credit_decisions`.
+   - Bảng giám sát tiến trình nạp dữ liệu `ops.etl_runs`, hiển thị thống kê dòng `raw_apps`, `dw_mart`, tỷ lệ làm sạch và mã băm chứng thực toàn vẹn SHA-256.
+
+### 8.4. Kiểm thử chất lượng
+Chạy toàn bộ 17 unit test của phân hệ ML và suy luận:
+```powershell
+.\.venv\Scripts\python.exe -m pytest ml/tests/ -q
+```
