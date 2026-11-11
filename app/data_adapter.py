@@ -4,9 +4,12 @@ Nạp model bundle từ Phân hệ Người 2 (ML), chuẩn hóa 16 predictors t
 và khởi tạo phiên làm việc cho Cán bộ Thẩm định (Officer).
 """
 
+import os
 from datetime import datetime
 from pathlib import Path
 import sys
+import pandas as pd
+import psycopg
 import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -71,9 +74,21 @@ def enrich_with_real_ml(app_record: dict) -> dict:
         res = assess(MODEL_BUNDLE, int(app_record["id"]), app_record["features"])
         app_record["pd"] = float(res["risk_score"])
         app_record["risk_level"] = str(res["risk_band"])
-        app_record["recommendation_code"] = str(res["recommendation"])
+        rec_code = str(res["recommendation"])
+        app_record["recommendation_code"] = rec_code
         app_record["reason_codes"] = list(res.get("reason_codes", []))
         app_record["alerts"] = list(res.get("alerts", []))
+
+        # Đồng bộ khuyến nghị mặc định cho Panel Quyết định của Cán bộ
+        rec_to_decision = {
+            "APPROVE_SIMULATION": "✓ Phê duyệt",
+            "REVIEW": "👁 Xem xét thêm",
+            "DECLINE_SIMULATION": "✕ Từ chối",
+        }
+        if app_record.get("status") != "Đã duyệt":
+            app_record["default_decision"] = rec_to_decision.get(
+                rec_code, "👁 Xem xét thêm"
+            )
 
         # Chuyển model_factors thật (đóng góp log-odds) sang định dạng hiển thị
         real_drivers = []
@@ -91,6 +106,432 @@ def enrich_with_real_ml(app_record: dict) -> dict:
     except Exception:
         pass
     return app_record
+
+
+def get_db_connection():
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        return None
+    try:
+        conn = psycopg.connect(dsn, autocommit=True, connect_timeout=8)
+        conn.execute("SET statement_timeout = 0")
+        return conn
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_dwh_kpi_summary():
+    """Lấy số liệu tổng hợp trực tiếp từ mart.application_overview_v1 (307,511 hồ sơ)."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn:
+            r = conn.execute("""
+                SELECT
+                    count(*) AS total_applications,
+                    count(target) AS labeled_applications,
+                    count(*) FILTER (WHERE target = 1) AS bad_loans_count,
+                    round((count(*) FILTER (WHERE target = 1)::numeric / NULLIF(count(target), 0) * 100), 2) AS bad_rate,
+                    sum(amt_credit) AS total_credit
+                FROM mart.application_overview_v1;
+            """).fetchone()
+            if r:
+                return {
+                    "total_applications": int(r[0]),
+                    "labeled_applications": int(r[1]),
+                    "bad_loans_count": int(r[2]),
+                    "bad_rate": float(r[3]) if r[3] is not None else 0.0,
+                    "total_credit": float(r[4]) if r[4] is not None else 0.0,
+                    "source": "Supabase DWH (PostgreSQL 17)"
+                }
+    except Exception:
+        return None
+    return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_olap_distribution(dim_choice: str, measure_choice: str):
+    """Truy vấn phân bổ đa chiều OLAP trực tiếp từ mart.application_overview_v1."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn:
+            if dim_choice == "Nhóm độ tuổi (Age Band)":
+                sql_q = """
+                    SELECT
+                        age_band AS category,
+                        count(*) AS count_val,
+                        round((count(*) FILTER (WHERE target = 1)::numeric / NULLIF(count(target), 0) * 100), 2) AS bad_rate,
+                        sum(amt_credit) AS total_credit
+                    FROM mart.application_overview_v1
+                    GROUP BY age_band
+                    ORDER BY CASE age_band WHEN '<25' THEN 1 WHEN '25-39' THEN 2 WHEN '40-59' THEN 3 WHEN '60+' THEN 4 ELSE 5 END;
+                """
+            elif dim_choice == "Loại hợp đồng (Contract Type)":
+                sql_q = """
+                    SELECT
+                        COALESCE(contract_type_name, 'Unknown') AS category,
+                        count(*) AS count_val,
+                        round((count(*) FILTER (WHERE target = 1)::numeric / NULLIF(count(target), 0) * 100), 2) AS bad_rate,
+                        sum(amt_credit) AS total_credit
+                    FROM mart.application_overview_v1
+                    GROUP BY contract_type_name
+                    ORDER BY count_val DESC;
+                """
+            elif dim_choice == "Trình độ học vấn (Education Level)":
+                sql_q = """
+                    SELECT
+                        COALESCE(education_level, 'Unknown') AS category,
+                        count(*) AS count_val,
+                        round((count(*) FILTER (WHERE target = 1)::numeric / NULLIF(count(target), 0) * 100), 2) AS bad_rate,
+                        sum(amt_credit) AS total_credit
+                    FROM mart.application_overview_v1
+                    GROUP BY education_level
+                    ORDER BY count_val DESC;
+                """
+            else:
+                sql_q = """
+                    SELECT
+                        COALESCE(income_type, 'Unknown') AS category,
+                        count(*) AS count_val,
+                        round((count(*) FILTER (WHERE target = 1)::numeric / NULLIF(count(target), 0) * 100), 2) AS bad_rate,
+                        sum(amt_credit) AS total_credit
+                    FROM mart.application_overview_v1
+                    GROUP BY income_type
+                    ORDER BY count_val DESC
+                    LIMIT 6;
+                """
+            rows = conn.execute(sql_q).fetchall()
+            if not rows:
+                return None
+            categories = []
+            vals = []
+            labels = []
+            for r in rows:
+                cat = str(r[0])
+                cnt = int(r[1])
+                rate = float(r[2]) if r[2] is not None else 0.0
+                credit_m = float(r[3]) / 1e6 if r[3] is not None else 0.0
+
+                categories.append(cat)
+                if "Tỷ lệ" in measure_choice:
+                    vals.append(rate)
+                    labels.append(f"{rate:.1f}%")
+                elif "Tổng giá trị" in measure_choice:
+                    vals.append(credit_m)
+                    labels.append(f"{credit_m:,.0f}M")
+                else:
+                    vals.append(cnt)
+                    labels.append(f"{cnt:,} đơn")
+            return {
+                "categories": categories,
+                "vals": vals,
+                "labels": labels
+            }
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_olap_cross_tab():
+    """Truy vấn ma trận chéo Cross-tab từ mart.application_overview_v1 kèm Bad Rate %."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn:
+            rows = conn.execute("""
+                SELECT
+                    age_band,
+                    count(*) FILTER (WHERE contract_type_name = 'Cash loans') AS cash_cnt,
+                    coalesce(sum(amt_credit) FILTER (WHERE contract_type_name = 'Cash loans'), 0) AS cash_credit,
+                    count(*) FILTER (WHERE contract_type_name = 'Revolving loans') AS rev_cnt,
+                    coalesce(sum(amt_credit) FILTER (WHERE contract_type_name = 'Revolving loans'), 0) AS rev_credit,
+                    count(*) AS total_cnt,
+                    coalesce(sum(amt_credit), 0) AS total_credit,
+                    count(target) AS labeled_cnt,
+                    count(*) FILTER (WHERE target = 1) AS bad_cnt
+                FROM mart.application_overview_v1
+                GROUP BY age_band
+                ORDER BY CASE age_band WHEN '<25' THEN 1 WHEN '25-39' THEN 2 WHEN '40-59' THEN 3 WHEN '60+' THEN 4 ELSE 5 END;
+            """).fetchall()
+            if not rows:
+                return None
+
+            data = {
+                "Nhóm độ tuổi (age_band)": [],
+                "Cash loans (M | Đơn)": [],
+                "Revolving loans (M | Đơn)": [],
+                "Tổng tín dụng (M | Đơn)": [],
+                "Tỷ lệ rủi ro (TARGET=1)": [],
+            }
+            total_cash_cnt = 0
+            total_cash_credit = 0.0
+            total_rev_cnt = 0
+            total_rev_credit = 0.0
+            overall_cnt = 0
+            overall_credit = 0.0
+            overall_labeled = 0
+            overall_bad = 0
+
+            for r in rows:
+                band, c_cnt, c_crd, r_cnt, r_crd, t_cnt, t_crd, l_cnt, b_cnt = r
+                c_crd_m = float(c_crd) / 1e6
+                r_crd_m = float(r_crd) / 1e6
+                t_crd_m = float(t_crd) / 1e6
+
+                total_cash_cnt += c_cnt
+                total_cash_credit += c_crd_m
+                total_rev_cnt += r_cnt
+                total_rev_credit += r_crd_m
+                overall_cnt += t_cnt
+                overall_credit += t_crd_m
+                overall_labeled += l_cnt
+                overall_bad += b_cnt
+
+                bad_rate = (b_cnt / l_cnt * 100.0) if l_cnt > 0 else 0.0
+
+                data["Nhóm độ tuổi (age_band)"].append(f"Nhóm {band} tuổi")
+                data["Cash loans (M | Đơn)"].append(f"{c_crd_m:,.1f}M ({c_cnt:,} đơn)")
+                data["Revolving loans (M | Đơn)"].append(f"{r_crd_m:,.1f}M ({r_cnt:,} đơn)")
+                data["Tổng tín dụng (M | Đơn)"].append(f"{t_crd_m:,.1f}M ({t_cnt:,} đơn)")
+                data["Tỷ lệ rủi ro (TARGET=1)"].append(f"{bad_rate:.2f}% ({b_cnt:,}/{l_cnt:,})")
+
+            overall_bad_rate = (overall_bad / overall_labeled * 100.0) if overall_labeled > 0 else 0.0
+            data["Nhóm độ tuổi (age_band)"].append("Tổng cộng danh mục")
+            data["Cash loans (M | Đơn)"].append(f"{total_cash_credit:,.1f}M ({total_cash_cnt:,} đơn)")
+            data["Revolving loans (M | Đơn)"].append(f"{total_rev_credit:,.1f}M ({total_rev_cnt:,} đơn)")
+            data["Tổng tín dụng (M | Đơn)"].append(f"{overall_credit:,.1f}M ({overall_cnt:,} đơn)")
+            data["Tỷ lệ rủi ro (TARGET=1)"].append(f"{overall_bad_rate:.2f}% ({overall_bad:,}/{overall_labeled:,})")
+
+            return pd.DataFrame(data)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_etl_runs():
+    """Lấy danh sách các đợt nạp ETL từ ops.etl_runs."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn:
+            rows = conn.execute("""
+                SELECT etl_run_id, started_at, finished_at, status, row_counts, source_manifest
+                FROM ops.etl_runs
+                ORDER BY etl_run_id DESC;
+            """).fetchall()
+            return rows
+    except Exception:
+        return None
+
+
+def save_audit_decision_to_db(record: dict) -> bool:
+    """Lưu quyết định của cán bộ thẩm định vào bảng app.credit_decisions trên Supabase."""
+    conn = get_db_connection()
+    if not conn:
+        return False
+    try:
+        with conn:
+            raw_id = record.get("Mã Hồ Sơ", "0").replace("#", "")
+            app_id = int(raw_id) if raw_id.isdigit() else 0
+            conn.execute("""
+                INSERT INTO app.credit_decisions (
+                    application_id, applicant_name, decision, reason_code, notes, officer_id, decided_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """, (
+                app_id,
+                record.get("Khách Hàng", "Unknown"),
+                record.get("Quyết Định", "Chưa rõ"),
+                record.get("Mã Lý Do", ""),
+                record.get("Ghi Chú Nghiệp Vụ", ""),
+                record.get("Cán Bộ Thẩm Định", "Officer"),
+                record.get("Thời Gian Ghi Nhận", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            ))
+            return True
+    except Exception:
+        return False
+
+
+def fetch_audit_history_from_db():
+    """Đọc lịch sử quyết định từ app.credit_decisions trên Supabase."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn:
+            rows = conn.execute("""
+                SELECT decision_id, application_id, applicant_name, decision, reason_code, notes, officer_id, decided_at
+                FROM app.credit_decisions
+                ORDER BY decision_id DESC;
+            """).fetchall()
+            logs = []
+            for r in rows:
+                logs.append({
+                    "Mã GD": f"DEC-{r[0]:03d}",
+                    "Mã Hồ Sơ": f"#{r[1]}",
+                    "Khách Hàng": r[2],
+                    "Quyết Định": r[3],
+                    "Mã Lý Do": r[4],
+                    "Ghi Chú Nghiệp Vụ": r[5] or "",
+                    "Cán Bộ Thẩm Định": r[6] or "Officer",
+                    "Thời Gian Ghi Nhận": str(r[7])[:19] if r[7] else "",
+                })
+            return logs
+    except Exception:
+        return None
+
+
+def _row_to_app_dict(d: dict) -> dict:
+    """Chuyển đổi một dòng dữ liệu từ mart.application_overview_v1 thành đối tượng hồ sơ chuẩn DSS."""
+    aid = str(d["application_id"])
+    raw_credit = float(d["amt_credit"]) if d.get("amt_credit") is not None else None
+    raw_income = float(d["amt_income_total"]) if d.get("amt_income_total") is not None else None
+    raw_annuity = float(d["amt_annuity"]) if d.get("amt_annuity") is not None else None
+    raw_goods = float(d["amt_goods_price"]) if d.get("amt_goods_price") is not None else raw_credit
+
+    # Chuẩn hóa hiển thị theo đơn vị K (1K = 1,000 đơn vị nguồn) khớp SI (K=10^3, M=10^6, B=10^9)
+    unit_scale = 1000.0
+    credit_val = (raw_credit / unit_scale) if raw_credit is not None else 0.0
+    income_val = (raw_income / unit_scale) if raw_income is not None else 0.0
+    annuity_val = (raw_annuity / unit_scale) if raw_annuity is not None else 0.0
+    goods_val = (raw_goods / unit_scale) if raw_goods is not None else credit_val
+
+    ratio_val = (raw_credit / raw_income) if (raw_credit is not None and raw_income is not None and raw_income > 0) else None
+
+    features = {
+        "amt_income_total": raw_income,
+        "amt_credit": raw_credit,
+        "amt_annuity": raw_annuity,
+        "credit_income_ratio": ratio_val,
+        "age_years": float(d["age_years"]) if d.get("age_years") is not None else None,
+        "employment_days": int(d["employment_days"]) if d.get("employment_days") is not None else None,
+        "income_type": str(d["income_type"]) if d.get("income_type") else "Unknown",
+        "education_level": str(d["education_level"]) if d.get("education_level") else "Unknown",
+        "contract_type_name": str(d["contract_type_name"]) if d.get("contract_type_name") else "Unknown",
+        "ext_source_1": float(d["ext_source_1"]) if d.get("ext_source_1") is not None else None,
+        "ext_source_2": float(d["ext_source_2"]) if d.get("ext_source_2") is not None else None,
+        "ext_source_3": float(d["ext_source_3"]) if d.get("ext_source_3") is not None else None,
+        "previous_application_count": int(d["previous_application_count"]) if d.get("previous_application_count") is not None else 0,
+        "previous_approved_count": int(d["previous_approved_count"]) if d.get("previous_approved_count") is not None else 0,
+        "previous_refused_count": int(d["previous_refused_count"]) if d.get("previous_refused_count") is not None else 0,
+        "previous_approval_rate": float(d["previous_approval_rate"]) if d.get("previous_approval_rate") is not None else None,
+    }
+
+    emp_str = f"{(d['employment_days'] / 365.25):.1f} năm" if d.get("employment_days") is not None else "N/A (Không làm việc / NULL)"
+    age_band_str = str(d.get("age_band") or "Unknown")
+    age_str = f"{int(d['age_years'])} tuổi ({age_band_str})" if d.get("age_years") is not None else "Unknown"
+    assets_str = ("Có Ô tô" if d.get("flag_own_car") else "Chưa có Ô tô") + " • " + ("Có BĐS" if d.get("flag_own_realty") else "Chưa có BĐS")
+
+    occ_raw = d.get("occupation_type")
+    inc_raw = d.get("income_type") or "Unknown"
+    short_label = str(occ_raw) if occ_raw else str(inc_raw)
+    cnt_child = int(d["cnt_children"]) if d.get("cnt_children") is not None else 0
+    cnt_fam = int(float(d["cnt_family_members"])) if d.get("cnt_family_members") is not None else 1
+
+    app_obj = {
+        "id": aid,
+        "applicant": short_label,
+        "product": str(d.get("contract_type_name") or "Unknown"),
+        "short_product": str(d.get("contract_type_name") or "Unknown"),
+        "income": income_val,
+        "credit": credit_val,
+        "annuity": annuity_val,
+        "goods": goods_val,
+        "unit_scale": unit_scale,
+        "unit_suffix": "K",
+        "target": d.get("target"),
+        "pd": 0.05,
+        "risk_level": "LOW",
+        "recommendation_code": "APPROVE_SIMULATION",
+        "sla": "45 phút",
+        "status": "Chờ duyệt",
+        "default_decision": "✓ Phê duyệt",
+        "age_band": age_band_str,
+        "age": age_str,
+        "emp_years": emp_str,
+        "edu": str(d.get("education_level") or "Unknown"),
+        "inc_type": str(inc_raw),
+        "occupation": str(occ_raw) if occ_raw else "Chưa khai báo (Unknown)",
+        "family_info": f"{cnt_child} con • {cnt_fam} thành viên",
+        "marital": str(d.get("family_status") or "Unknown"),
+        "assets": assets_str,
+        "hist_total": f"{d.get('previous_application_count', 0)} đơn hợp lệ",
+        "hist_app": f"{d.get('previous_approved_count', 0)} lần",
+        "hist_ref": f"{d.get('previous_refused_count', 0)} lần",
+        "hist_rate": f"{(float(d['previous_approval_rate'])*100):.1f}%" if d.get("previous_approval_rate") is not None else "N/A (Chưa có LS)",
+        "ext1": f"{float(d['ext_source_1']):.3f}" if d.get("ext_source_1") is not None else "N/A",
+        "ext2": f"{float(d['ext_source_2']):.3f}" if d.get("ext_source_2") is not None else "N/A",
+        "ext3": f"{float(d['ext_source_3']):.3f}" if d.get("ext_source_3") is not None else "N/A",
+        "dpd": "Không phát sinh trễ hạn",
+        "features": features,
+        "drivers": [],
+        "is_real_dwh": True
+    }
+    return enrich_with_real_ml(app_obj)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_live_applications_sample(limit: int = 15):
+    """Kéo một tập hồ sơ thật ban đầu từ mart.application_overview_v1."""
+    conn = get_db_connection()
+    if not conn:
+        return {}
+    try:
+        with conn:
+            cols = [d[0] for d in conn.execute("SELECT * FROM mart.application_overview_v1 LIMIT 0").description]
+            rows = conn.execute("SELECT * FROM mart.application_overview_v1 ORDER BY application_id LIMIT %s", (limit,)).fetchall()
+            real_apps = {}
+            for r in rows:
+                d = dict(zip(cols, r))
+                app_obj = _row_to_app_dict(d)
+                real_apps[app_obj["id"]] = app_obj
+            return real_apps
+    except Exception:
+        return {}
+
+
+def fetch_application_by_id(app_id: int):
+    """Tìm kiếm trực tiếp hồ sơ theo ID từ mart.application_overview_v1 (trong toàn bộ 307,511 hồ sơ)."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        with conn:
+            cols = [d[0] for d in conn.execute("SELECT * FROM mart.application_overview_v1 LIMIT 0").description]
+            row = conn.execute("SELECT * FROM mart.application_overview_v1 WHERE application_id = %s", (app_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(zip(cols, row))
+            return _row_to_app_dict(d)
+    except Exception:
+        return None
+
+
+def fetch_live_applications_batch(limit: int = 20, offset: int = 0):
+    """Nạp thêm một lô hồ sơ từ mart.application_overview_v1 theo phân trang offset."""
+    conn = get_db_connection()
+    if not conn:
+        return {}
+    try:
+        with conn:
+            cols = [d[0] for d in conn.execute("SELECT * FROM mart.application_overview_v1 LIMIT 0").description]
+            rows = conn.execute(
+                "SELECT * FROM mart.application_overview_v1 ORDER BY application_id LIMIT %s OFFSET %s",
+                (limit, offset)
+            ).fetchall()
+            res = {}
+            for r in rows:
+                d = dict(zip(cols, r))
+                app_obj = _row_to_app_dict(d)
+                res[app_obj["id"]] = app_obj
+            return res
+    except Exception:
+        return {}
 
 
 def init_session_data():
@@ -312,32 +753,64 @@ def init_session_data():
             },
         }
 
-        # Chấm điểm thực tế từng hồ sơ bằng mô hình ML thực tế của Người 2
-        st.session_state.applications = {
-            aid: enrich_with_real_ml(app_data) for aid, app_data in raw_apps.items()
-        }
+        # Ưu tiên tuyệt đối dữ liệu thật từ Supabase Cloud DWH
+        live_samples = {}
+        try:
+            live_samples = fetch_live_applications_sample(limit=16)
+        except Exception:
+            live_samples = {}
+
+        if live_samples:
+            st.session_state.applications = live_samples
+            st.session_state.is_live_db = True
+        else:
+            # Fallback offline khi không có kết nối DB
+            st.session_state.applications = {
+                aid: enrich_with_real_ml(app_data) for aid, app_data in raw_apps.items()
+            }
+            st.session_state.is_live_db = False
 
     if "audit_logs" not in st.session_state:
-        st.session_state.audit_logs = [
-            {
-                "Mã GD": "DEC-901",
-                "Mã Hồ Sơ": "#1002",
-                "Khách Hàng": "Trần Thị Bích Ngọc",
-                "Quyết Định": "Phê duyệt",
-                "Mã Lý Do": "PAS_01: Đạt toàn bộ tiêu chí khẩu vị rủi ro chuẩn",
-                "Ghi Chú Nghiệp Vụ": (
-                    "Khách hàng có lịch sử trả nợ tốt 100%, sở hữu BĐS và ô tô."
-                ),
-                "Cán Bộ Thẩm Định": "Officer",
-                "Thời Gian Ghi Nhận": "2026-11-08 01:40:19",
-            }
-        ]
+        db_logs = fetch_audit_history_from_db()
+        if db_logs is not None:
+            st.session_state.audit_logs = db_logs
+        elif not st.session_state.get("is_live_db"):
+            st.session_state.audit_logs = [
+                {
+                    "Mã GD": "DEC-901",
+                    "Mã Hồ Sơ": "#1002",
+                    "Khách Hàng": "Trần Thị Bích Ngọc",
+                    "Quyết Định": "Phê duyệt",
+                    "Mã Lý Do": "PAS_01: Đạt toàn bộ tiêu chí khẩu vị rủi ro chuẩn",
+                    "Ghi Chú Nghiệp Vụ": (
+                        "Khách hàng có lịch sử trả nợ tốt 100%, sở hữu BĐS và ô tô."
+                    ),
+                    "Cán Bộ Thẩm Định": "Officer",
+                    "Thời Gian Ghi Nhận": "2026-11-08 01:40:19",
+                }
+            ]
+        else:
+            st.session_state.audit_logs = []
+
+    # Đồng bộ trạng thái "Đã duyệt" từ nhật ký kiểm toán sang danh sách Queue
+    for log_item in st.session_state.audit_logs:
+        logged_id = str(log_item.get("Mã Hồ Sơ", "")).replace("#", "").strip()
+        if logged_id in st.session_state.applications:
+            st.session_state.applications[logged_id]["status"] = "Đã duyệt"
+            dec_text = str(log_item.get("Quyết Định", ""))
+            for opt in ("✓ Phê duyệt", "👁 Xem xét thêm", "✕ Từ chối"):
+                if dec_text and dec_text in opt:
+                    st.session_state.applications[logged_id]["default_decision"] = opt
+                    break
 
     if "draft_note" not in st.session_state:
         st.session_state.draft_note = ""
+    if "draft_note_area" not in st.session_state:
+        st.session_state.draft_note_area = st.session_state.draft_note
 
-    if "last_selected_id" not in st.session_state:
-        st.session_state.last_selected_id = "1001"
+    first_aid = next(iter(st.session_state.applications.keys()), "100002")
+    if "last_selected_id" not in st.session_state or st.session_state.last_selected_id not in st.session_state.applications:
+        st.session_state.last_selected_id = first_aid
 
-    if "sim_selected_id" not in st.session_state:
-        st.session_state.sim_selected_id = "1001"
+    if "sim_selected_id" not in st.session_state or st.session_state.sim_selected_id not in st.session_state.applications:
+        st.session_state.sim_selected_id = first_aid

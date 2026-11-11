@@ -5,7 +5,43 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc Star Schem
 
 - **Thành viên A (Database & ETL):** Kho dữ liệu PostgreSQL 16+, pipeline ETL streaming COPY, bảo toàn manifest SHA-256, Star Schema và Data Marts.
 - **Thành viên B (Machine Learning & Scoring):** Huấn luyện mô hình Logistic Regression (ROC-AUC holdout 0.7424), chính sách phân tầng rủi ro `policy_v1_illustrative`, giải thích log-odds theo Feature Contract v1 (chi tiết tại `ml/README.md`).
-- **Thành viên C (Web Dashboard & Tích hợp DSS):** Ứng dụng Streamlit module hóa (`app/`), hỗ trợ cán bộ thẩm định (Officer) đánh giá hồ sơ 360 độ, báo cáo phân tích đa chiều OLAP, mô phỏng kịch bản What-If thời gian thực và ghi nhật ký kiểm toán vào `app.credit_decisions`.
+- **Thành viên C (Web Dashboard & Tích hợp DSS):** Ứng dụng Streamlit module hóa (`app/`), hỗ trợ cán bộ thẩm định (Officer) đánh giá hồ sơ 360 độ, tìm kiếm trực tiếp 307,511 hồ sơ trên Supabase Cloud, báo cáo phân tích đa chiều OLAP, mô phỏng kịch bản What-If thời gian thực và ghi nhật ký kiểm toán vào `app.credit_decisions`.
+
+---
+
+## ⚡ 0. Hướng dẫn Chạy Nhanh (Kết nối Supabase Cloud — dành cho Thành viên Nhóm / Thầy cô)
+
+Kho dữ liệu đầy đủ **Home Credit (307,511 hồ sơ & 1.67 triệu giao dịch lịch sử)** đã được nhóm nạp hoàn tất lên **Supabase Cloud (PostgreSQL 17)**, kèm sẵn artifact mô hình ML (`ml/results/models/logreg_v1_20261106/`).  
+Do đó, bạn **KHÔNG CẦN** cài đặt PostgreSQL local, **KHÔNG CẦN** tải 600MB dữ liệu thô từ Kaggle và **KHÔNG CẦN** chạy lại pipeline ETL. Chỉ cần làm 4 bước sau (mất ~2 phút):
+
+1. **Lấy mã nguồn mới nhất về máy (yêu cầu Python 3.12+ / 3.13):**
+   - Nếu mới clone lần đầu:
+     ```powershell
+     git clone https://github.com/hieunguyen2310959-boop/credit-dw-home-credit.git
+     cd credit-dw-home-credit
+     ```
+   - Nếu đã có repo sẵn trên máy:
+     ```powershell
+     git pull origin main
+     ```
+2. **Cài đặt các thư viện cần thiết:**
+   ```powershell
+   pip install -r requirements.txt
+   ```
+   *(Khuyến nghị tạo `.venv` riêng trước nếu muốn tách môi trường; nếu cần chạy thêm unit test `pytest`, cài bằng `pip install -r requirements-dev.txt`. Không cần cài gói `credit_ml` rời vì `app/main.py` tự nạp thư mục `ml/`.)*
+3. **Cấu hình file kết nối `.env`:**
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+   Mở file `.env`, **bỏ dấu `#`** ở dòng `DATABASE_URL=...` rồi thay `YOUR_PASSWORD` bằng mật khẩu Supabase do nhóm trưởng gửi riêng *(file `.env` đã được `.gitignore` ẩn khỏi Git)*.  
+   *(Lưu ý: nếu chưa tạo `.env` hoặc mất kết nối mạng, ứng dụng vẫn mở được ở **Chế độ Offline** với bộ 4 hồ sơ mẫu `#1001`–`#1004`.)*
+4. **Khởi chạy Ứng dụng Web DSS:**
+   ```powershell
+   python -m streamlit run app/main.py
+   ```
+   Trình duyệt sẽ tự động mở tại `http://localhost:8501` với đầy đủ dữ liệu live **307,511 hồ sơ**, mô hình ML, bảng điều khiển OLAP và nhật ký `app.credit_decisions` dùng chung trên Cloud.
+
+---
 
 ## Đã có
 
@@ -16,13 +52,13 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc Star Schem
 - Ràng buộc PK/FK/UNIQUE/CHECK; snapshot không có nhãn; điểm hợp lệ; chọn kết quả thành công mới nhất, có tie-break theo ID.
 - SQL thống kê/OLAP, fixture **SYNTHETIC**, kiểm thử tích hợp trên PostgreSQL thật.
 
-- **Bảng tác vụ nghiệp vụ**: `app.credit_decisions` (lưu vết quyết định phê duyệt/từ chối của Cán bộ kèm mã lý do chuẩn hóa và thời gian thực).
-- **Mô hình máy học & Scoring Engine**: Gói `credit_ml` hoàn chỉnh, artifact `logreg_v1_20261106`, hàm `assess()` và `what_if()` với 17/17 tests passing.
-- **Giao diện Web DSS (Streamlit)**: 4 Tab nghiệp vụ độc lập (Core DSS, OLAP Analytics, What-If Simulator, Audit Trail), Sticky Header, chuẩn hóa tiền tệ theo đơn vị nguồn (không gán VNĐ).
+- **Bảng tác vụ nghiệp vụ (trên Supabase Cloud DWH)**: `app.credit_decisions` (lưu vết quyết định phê duyệt/từ chối của Cán bộ kèm mã lý do chuẩn hóa và thời gian thực).
+- **Mô hình máy học & Scoring Engine**: Gói `credit_ml` hoàn chỉnh, artifact `logreg_v1_20261106`, API `assess()` và `what_if()` với 17/17 ML tests passing (`ml/tests/`).
+- **Giao diện Web DSS (Streamlit)**: 4 Tab nghiệp vụ độc lập (Core DSS, OLAP Analytics, What-If Simulator, Audit Trail), Sticky Header, chuẩn hóa đơn vị tiền tệ SI (`K`, `M`, `B`).
 
 ## 1. Cài và tạo database trên Windows
 
-Cài Python 3.13 và PostgreSQL 16+ bằng bộ cài Windows. Dùng **pgAdmin** hoặc **SQL Shell (psql)** tạo một database rỗng riêng, ví dụ `credit_dw_demo`, và một database khác cho kiểm thử `credit_dw_test`. Role kết nối phải sở hữu các database này hoặc có quyền tạo schema/bảng trong đó; không cần superuser cho ứng dụng.
+Cài Python 3.12+ (khuyến nghị 3.12 hoặc 3.13) và PostgreSQL 16+ bằng bộ cài Windows. Dùng **pgAdmin** hoặc **SQL Shell (psql)** tạo một database rỗng riêng, ví dụ `credit_dw_demo`, và một database khác cho kiểm thử `credit_dw_test`. Role kết nối phải sở hữu các database này hoặc có quyền tạo schema/bảng trong đó; không cần superuser cho ứng dụng.
 
 Mở PowerShell tại thư mục repo:
 
@@ -46,7 +82,7 @@ Sửa `DATABASE_URL` trong `.env` bằng thông tin kết nối local của bạ
 
 ## 2. Nạp dữ liệu Home Credit thật
 
-Lấy dữ liệu từ cuộc thi Home Credit Default Risk trên Kaggle và tuân thủ điều khoản nguồn. Repo không kèm dữ liệu thật. Đặt tệp ở `data/raw/` hoặc ngoài repo. Loader đọc các cột tối thiểu của đề xuất, bỏ qua cột khác. Danh sách chính xác ở `scripts/database.py` (`APP_FIELDS`, `PREV_FIELDS`); thiếu header bắt buộc thì dừng, không tự đoán.
+Lấy dữ liệu từ cuộc thi Home Credit Default Risk trên Kaggle (hoặc tải nhanh qua `python scripts/download_data.py` vào `data/raw/` kèm tự động kiểm tra header ETL) và tuân thủ điều khoản nguồn. Repo không kèm dữ liệu thật. Đặt tệp ở `data/raw/` hoặc ngoài repo. Loader đọc các cột tối thiểu của đề xuất, bỏ qua cột khác. Danh sách chính xác ở `scripts/database.py` (`APP_FIELDS`, `PREV_FIELDS`); thiếu header bắt buộc thì dừng, không tự đoán.
 
 **Dùng database mới**, ví dụ `credit_dw`, với `DATABASE_URL` tương ứng, không dùng DB đã nạp fixture:
 
@@ -115,64 +151,64 @@ Train trên Colab, kết quả ở `ml/results/`; hướng dẫn chạy, đăng 
 ## 7. Cấu trúc repo
 
 ```text
-sql/                     # Database DDL: 001_schema, 002_views, 003_load_dw, 004_analytics
-scripts/database.py      # Bộ công cụ CLI quản trị DB: init-db / load / demo / check
-data/fixtures/           # Dữ liệu SYNTHETIC mẫu (không chứa dữ liệu nhạy cảm)
+sql/                       # Database DDL: 001_schema, 002_views, 003_load_dw, 004_analytics
+scripts/
+├── database.py            # Bộ công cụ CLI quản trị DB: init-db / load / demo / check
+└── download_data.py       # Script tải bộ dữ liệu Home Credit vào data/raw/ & kiểm tra schema
+data/fixtures/             # Dữ liệu SYNTHETIC mẫu (không chứa dữ liệu nhạy cảm)
 contracts/features-v1.json # Hợp đồng dữ liệu 16 predictors chuẩn giữa DW - ML - Web
-ml/                      # Phân hệ ML/DSS: credit_ml, Colab notebook, model artifacts, tests
-app/                     # Phân hệ Web & Tích hợp DSS (Streamlit Enterprise)
-├── main.py              # File điều phối trung tâm (~69 dòng)
-├── styles.py            # CSS chuẩn Ngân hàng & Sticky Header ghim cố định
-├── data_adapter.py      # Tầng nạp dữ liệu, Contract v1, tải mô hình ML & assess()
-└── views/               # 4 Tab chức năng độc lập
-    ├── tab_core.py      # Tab 1: KPI Ribbon, Hàng đợi (Queue), Gauge, Drivers, Quyết định
-    ├── tab_olap.py      # Tab 2: Phân tích đa chiều OLAP & Ma trận phân bổ chéo
-    ├── tab_whatif.py    # Tab 3: Mô phỏng Kịch bản Tín dụng (What-If Simulator)
-    └── tab_audit.py     # Tab 4: Nhật ký Kiểm toán (app.credit_decisions) & Giám sát ETL
-.streamlit/config.toml   # Cấu hình giao diện Streamlit Enterprise
-docs/                    # Tài liệu đặc tả kiến trúc DWH & ERD
-tests/                   # Kiểm thử tích hợp PostgreSQL thật (Người 1)
+ml/                        # Phân hệ ML/DSS: credit_ml, Colab notebook, model artifacts, tests
+app/                       # Phân hệ Web & Tích hợp DSS (Streamlit Enterprise)
+├── main.py                # File điều phối trung tâm (69 dòng)
+├── styles.py              # CSS chuẩn Ngân hàng & Sticky Header ghim cố định
+├── data_adapter.py        # Tầng nạp dữ liệu Supabase Live, Contract v1, tải mô hình ML & assess()
+└── views/                 # 4 Tab chức năng độc lập
+    ├── tab_core.py        # Tab 1: KPI Ribbon, Hàng đợi (Queue + Live Search), Gauge, Drivers, Quyết định
+    ├── tab_olap.py        # Tab 2: Phân tích đa chiều OLAP & Ma trận phân bổ chéo từ Supabase DWH
+    ├── tab_whatif.py      # Tab 3: Mô phỏng Kịch bản Tín dụng (What-If Simulator)
+    └── tab_audit.py       # Tab 4: Nhật ký Kiểm toán (app.credit_decisions) & Giám sát ETL
+.streamlit/config.toml     # Cấu hình giao diện Streamlit Enterprise
+docs/                      # Tài liệu đặc tả kiến trúc DWH (database.md, verification.md, proposal-original.md)
+tests/                     # Kiểm thử tích hợp PostgreSQL thật (Thành viên A)
+requirements.txt           # Thư viện chạy Web DSS, DB adapter & ML inference
+requirements-dev.txt       # Bổ sung pytest để chạy kiểm thử
+.env.example               # Mẫu cấu hình biến môi trường DATABASE_URL (không chứa mật khẩu thật)
 ```
 
-Tài liệu thiết kế gốc có một số nội dung ngoài phạm vi database lần này; `docs/database.md` ghi phần đã hiện thực và giới hạn. Nguồn dữ liệu/dictionary phải được nhóm kiểm tra lại khi tải CSV thật; lần triển khai này mới chạy fixture synthetic, chưa tuyên bố kết quả full Home Credit.
+> Hệ thống hỗ trợ vận hành linh hoạt ở hai chế độ: **Kết nối Live Supabase Cloud** (307,511 hồ sơ thực tế, mặc định khi cấu hình `.env`) hoặc **Local PostgreSQL** (qua `scripts/database.py`), đồng thời có chế độ dự phòng offline với dữ liệu mẫu khi mất kết nối mạng.
 
 
-## 8. Hướng dẫn khởi chạy Phân hệ Web & DSS (Streamlit)
+## 8. Phân hệ Web & DSS (Streamlit)
 
-Phân hệ Web được xây dựng hoàn toàn bằng **Streamlit** (Python thuần, không phụ thuộc NodeJS hay Docker), kết nối trực tiếp đến mô hình ML của Người 2 và tuân thủ tuyệt đối quy ước dữ liệu của Người 1.
+Phân hệ Web được xây dựng hoàn toàn bằng **Streamlit** (Python thuần, không phụ thuộc NodeJS hay Docker), kết nối trực tiếp đến Supabase PostgreSQL 17, mô hình ML của Thành viên B (`logreg_v1_20261106`) và tuân thủ tuyệt đối quy ước dữ liệu của Thành viên A.
 
-### 8.1. Cài đặt thư viện
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -r ml/requirements-ml.txt
-.\.venv\Scripts\python.exe -m pip install streamlit plotly
-```
+### 8.1. Tùy chọn khởi chạy nâng cao
+*(Các bước cài đặt & chạy chuẩn đã tóm tắt ở **Mục 0** ở đầu trang.)*
+* Dùng môi trường ảo `.venv`: `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` rồi `.\.venv\Scripts\python.exe -m streamlit run app/main.py`.
+* Đổi cổng mặc định (nếu `8501` đang bận): `python -m streamlit run app/main.py --server.port 8502`.
+* Chạy không có DB (Offline Mode): bỏ qua bước tạo `.env`, ứng dụng tự dùng 4 hồ sơ mẫu (`#1001`–`#1004`). Lưu ý: nếu tự dựng mới Local PostgreSQL từ `sql/001_schema.sql`, bảng `app.credit_decisions` cần tạo thêm (hiện đã khởi tạo sẵn trên Supabase Cloud).
 
-### 8.2. Chạy ứng dụng
-Mở terminal tại thư mục gốc của repository:
-```powershell
-.\.venv\Scripts\python.exe -m streamlit run app/main.py
-```
-Ứng dụng sẽ tự động mở trên trình duyệt tại địa chỉ: `http://localhost:8501`.
-
-### 8.3. Các tính năng chính của 4 phân hệ:
+### 8.2. Các tính năng chính của 4 phân hệ:
 1. **Tab 1 — Thẩm định hồ sơ (Core DSS):**
-   - KPI Ribbon 4 chỉ số cấp cao: Tổng hồ sơ, tổng giá trị tín dụng đề nghị (`SUM(amt_credit)` bảo toàn đơn vị nguồn), tỷ lệ khó khăn thanh toán (`TARGET=1` tính trên mẫu số `COUNT(target)` có nhãn), tiến độ ca trực.
-   - Hàng đợi hồ sơ (Queue) dạng thẻ đóng khung độc lập, hỗ trợ tìm kiếm và lọc trạng thái.
-   - Hồ sơ 360 độ: Đồng hồ đo rủi ro Gauge chuẩn Basel, phân tích đóng góp log-odds thực tế (`model_factors`), tình hình tài chính & đòn bẩy `credit_income_ratio`, lịch sử vay quá khứ.
-   - Panel quyết định tín dụng: 3 nút dạng Segmented Button ngang hàng (`Phê duyệt`, `Xem xét thêm`, `Từ chối`), mã lý do chuẩn hóa và nút "Điền mẫu nhanh" (Autofill).
+   - **KPI Ribbon 4 chỉ số Live DWH:** Tổng hồ sơ (307,511), tổng giá trị tín dụng đề nghị (`SUM(amt_credit)` chuẩn SI: `K`, `M`, `B`), tỷ lệ khó khăn thanh toán (`TARGET=1` tính trên mẫu số `COUNT(target)` có nhãn = 8.1%), tiến độ ca trực.
+   - **Hàng đợi hồ sơ (Queue) & Lọc thông minh:** Lọc kép theo trạng thái xử lý & mức rủi ro (`LOW/MEDIUM/HIGH`), gõ bất kỳ ID nào (VD: `100009`) để truy vấn trực tiếp từ 307,511 hồ sơ trên Supabase, kèm nút **➕ Nạp thêm 20 hồ sơ**.
+   - **Hồ sơ 360 độ:** Đồng hồ đo rủi ro Gauge chuẩn Basel, đối chiếu nhãn thực tế (`TARGET=0/1`), phân tích log-odds (`model_factors`), nghề nghiệp/gia đình/3 điểm nguồn ngoài (`EXT_1/2/3`), đòn bẩy `credit_income_ratio`, và lịch sử vay quá khứ (bảo toàn `N/A` cho giá trị `NULL`).
+   - **Panel quyết định tín dụng:** Tự động đồng bộ khuyến nghị theo mức rủi ro, 3 nút Segmented Button (`Phê duyệt`, `Xem xét thêm`, `Từ chối`), nút "Điền mẫu nhanh" & "Lưu quyết định" ghi trực tiếp vào `app.credit_decisions` trên Supabase.
 2. **Tab 2 — Báo cáo phân tích đa chiều (OLAP Analytics):**
-   - Hỗ trợ thao tác Roll-up, Slice & Dice theo 3 chiều Dimension: *Nhóm độ tuổi (Age Band)*, *Loại hợp đồng (Contract Type)*, *Nguồn thu nhập (Income Type)*.
-   - Bảng ma trận phân bổ chéo (Cross-Tab Matrix) đồng bộ 100% với danh mục hồ sơ Data Mart, chuẩn hóa nhãn thiếu thành `Unknown`.
+   - Hỗ trợ thao tác Roll-up, Slice & Dice trực tiếp trên toàn bộ 307,511 hồ sơ Data Mart theo 4 chiều Dimension: *Nhóm độ tuổi (Age Band)*, *Loại hợp đồng (Contract Type)*, *Nguồn thu nhập (Income Type)* và *Trình độ học vấn (Education Level)*.
+   - Bảng ma trận phân bổ chéo (Cross-Tab Matrix) đồng bộ 100% với Data Mart kèm cột **Tỷ lệ rủi ro (TARGET=1)** theo từng phân khúc và chuẩn hóa nhãn thiếu thành `Unknown`.
 3. **Tab 3 — Mô phỏng kịch bản (What-If Analysis):**
-   - Cho phép Cán bộ điều chỉnh giả định giá trị tín dụng, thu nhập và ngưỡng khẩu vị rủi ro (`review_threshold`, `decline_threshold` trong `PolicyConfig`).
+   - Cho phép Cán bộ điều chỉnh giả định giá trị tín dụng, thu nhập (theo đơn vị `K` thống nhất và nhân `unit_scale` chuẩn xác khi chấm điểm), cùng ngưỡng khẩu vị rủi ro (`review_threshold`, `decline_threshold` trong `PolicyConfig`).
    - Tái chấm điểm thời gian thực thông qua hàm `assess()` của gói `credit_ml`, đối chiếu trực quan Before vs After mà không ghi đè dữ liệu gốc của kho.
-   - Nút "Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt" tự động liên kết dữ liệu sang Tab 1.
+   - Nút "Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt" tự động điền căn cứ sang Tab 1.
 4. **Tab 4 — Nhật ký kiểm toán & Giám sát vận hành (Audit Trail & ETL Runs):**
-   - Lưu vết toàn bộ quyết định tín dụng của Cán bộ (Officer) vào cấu trúc bảng `app.credit_decisions`.
-   - Bảng giám sát tiến trình nạp dữ liệu `ops.etl_runs`, hiển thị thống kê dòng `raw_apps`, `dw_mart`, tỷ lệ làm sạch và mã băm chứng thực toàn vẹn SHA-256.
+   - Lưu vết toàn bộ quyết định tín dụng vào bảng `app.credit_decisions` trên Supabase kèm nút **🔄 Đồng bộ từ Supabase**.
+   - Bảng giám sát tiến trình nạp dữ liệu thực tế từ `ops.etl_runs`, hiển thị thống kê dòng (`app`, `prev`, `dw`), mã băm SHA-256 và **Báo cáo Kiểm soát Chất lượng Dữ liệu ETL** (`55,374` sentinel → `NULL`, lọc đơn mồ côi `orphan`, kiểm tra rò rỉ tương lai).
 
-### 8.4. Kiểm thử chất lượng
-Chạy toàn bộ 17 unit test của phân hệ ML và suy luận:
+### 8.3. Kiểm thử chất lượng
+Cài thêm công cụ test (nếu chưa cài `requirements-dev.txt`) rồi chạy toàn bộ 17 unit test của phân hệ ML và suy luận:
 ```powershell
-.\.venv\Scripts\python.exe -m pytest ml/tests/ -q
+pip install -r requirements-dev.txt
+python -m pytest ml/tests/ -q
 ```
+*(Nếu dùng môi trường ảo `.venv`, thay `python` bằng `.\.venv\Scripts\python.exe`.)*

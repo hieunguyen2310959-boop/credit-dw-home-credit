@@ -6,19 +6,44 @@ Bao gồm thanh KPI Ribbon, Hàng đợi hồ sơ (Queue), Panel quyết định
 from datetime import datetime
 import plotly.graph_objects as go
 import streamlit as st
-from app.data_adapter import REVIEW_THRESHOLD, DECLINE_THRESHOLD, MODEL_NAME_LABEL
+from app.data_adapter import (
+    REVIEW_THRESHOLD,
+    DECLINE_THRESHOLD,
+    MODEL_NAME_LABEL,
+    fetch_dwh_kpi_summary,
+    save_audit_decision_to_db,
+    fetch_audit_history_from_db,
+    fetch_application_by_id,
+    fetch_live_applications_batch,
+)
 
 
 def render_kpi_ribbon():
-    """Hiển thị 4 chỉ số KPI quan trọng ở đầu Tab Thẩm định."""
+    """Hiển thị 4 chỉ số KPI quan trọng ở đầu Tab Thẩm định (kết nối trực tiếp DWH Supabase)."""
+    dwh = fetch_dwh_kpi_summary()
     apps = st.session_state.applications
-    total_apps = len(apps)
-    total_credit = sum(a["credit"] for a in apps.values())
-    labeled_apps = [a for a in apps.values() if a.get("target") is not None]
-    labeled_count = len(labeled_apps)
-    target_1_count = sum(1 for a in labeled_apps if a.get("target") == 1)
-    done_count = sum(1 for a in apps.values() if a["status"] == "Đã duyệt")
-    bad_rate = (target_1_count / labeled_count) * 100 if labeled_count else 0.0
+    done_count = len([x for x in st.session_state.get("audit_logs", []) if x.get("Quyết Định") in ("Phê duyệt", "Từ chối", "Xem xét thêm")])
+
+    if dwh:
+        total_apps_disp = f"{dwh['total_applications']:,}"
+        total_credit_disp = f"{dwh['total_credit'] / 1e9:,.2f}B"
+        labeled_count_disp = f"{dwh['labeled_applications']:,}"
+        target_1_disp = f"{dwh['bad_loans_count']:,}"
+        bad_rate = dwh["bad_rate"]
+        source_badge = "🟢 Live DWH Supabase (PostgreSQL 17)"
+        cohort_subtitle = "hồ sơ trong Kho dữ liệu"
+    else:
+        total_apps = len(apps)
+        total_apps_disp = str(total_apps)
+        total_credit_disp = f"{sum(a['credit'] for a in apps.values()):,.1f}M"
+        labeled_apps = [a for a in apps.values() if a.get("target") is not None]
+        labeled_count = len(labeled_apps)
+        target_1_count = sum(1 for a in labeled_apps if a.get("target") == 1)
+        bad_rate = (target_1_count / labeled_count) * 100 if labeled_count else 0.0
+        labeled_count_disp = str(labeled_count)
+        target_1_disp = str(target_1_count)
+        source_badge = "⚡ Dữ liệu cohort mẫu (Offline mode)"
+        cohort_subtitle = "hồ sơ trong cohort mẫu"
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -27,10 +52,10 @@ def render_kpi_ribbon():
 <div class="kpi-card">
     <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">TỔNG HỒ SƠ TIẾP NHẬN</div>
     <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
-        <span class="mono" style="font-size:1.55rem; font-weight:700; color:#0F172A;">{total_apps}</span>
-        <span style="font-size:0.75rem; color:#64748B;">hồ sơ trong cohort</span>
+        <span class="mono" style="font-size:1.55rem; font-weight:700; color:#0F172A;">{total_apps_disp}</span>
+        <span style="font-size:0.75rem; color:#64748B;">{cohort_subtitle}</span>
     </div>
-    <div style="font-size:0.7rem; color:#2563EB; font-weight:500; margin-top:4px;">⚡ Đúng chuẩn grain 1 dòng/hồ sơ</div>
+    <div style="font-size:0.7rem; color:#2563EB; font-weight:500; margin-top:4px;">{source_badge}</div>
 </div>
 """,
             unsafe_allow_html=True,
@@ -42,7 +67,7 @@ def render_kpi_ribbon():
 <div class="kpi-card">
     <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">TỔNG GIÁ TRỊ TÍN DỤNG ĐỀ NGHỊ</div>
     <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
-        <span class="mono" style="font-size:1.55rem; font-weight:700; color:#0F172A;">{total_credit:,.1f}M</span>
+        <span class="mono" style="font-size:1.55rem; font-weight:700; color:#0F172A;">{total_credit_disp}</span>
         <span style="font-size:0.75rem; color:#64748B;">đơn vị nguồn</span>
     </div>
     <div style="font-size:0.7rem; color:#059669; font-weight:500; margin-top:4px;">✓ SUM(amt_credit) bảo toàn qua ETL</div>
@@ -58,7 +83,7 @@ def render_kpi_ribbon():
     <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">TỶ LỆ KHÓ KHĂN THANH TOÁN (TARGET=1)</div>
     <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
         <span class="mono" style="font-size:1.55rem; font-weight:700; color:#DC2626;">{bad_rate:.1f}%</span>
-        <span style="font-size:0.75rem; color:#64748B;">({target_1_count}/{labeled_count} hồ sơ có nhãn)</span>
+        <span style="font-size:0.75rem; color:#64748B;">({target_1_disp}/{labeled_count_disp} hồ sơ có nhãn)</span>
     </div>
     <div style="font-size:0.7rem; color:#64748B; margin-top:4px;">Mẫu số: <code>COUNT(target)</code> (không tính tập test)</div>
 </div>
@@ -72,8 +97,8 @@ def render_kpi_ribbon():
 <div class="kpi-card">
     <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">TIẾN ĐỘ THẨM ĐỊNH CA</div>
     <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
-        <span class="mono" style="font-size:1.55rem; font-weight:700; color:#059669;">{done_count} / {total_apps}</span>
-        <span style="font-size:0.75rem; color:#64748B;">đã ghi nhận quyết định</span>
+        <span class="mono" style="font-size:1.55rem; font-weight:700; color:#059669;">{done_count}</span>
+        <span style="font-size:0.75rem; color:#64748B;">quyết định đã lưu vết</span>
     </div>
     <div style="font-size:0.7rem; color:#64748B; margin-top:4px;">Lưu vết tại app.credit_decisions</div>
 </div>
@@ -151,57 +176,139 @@ def render_tab_core():
                 unsafe_allow_html=True,
             )
 
+            # Đồng bộ chọn hồ sơ nếu được đẩy từ Tab What-If sang
+            if st.session_state.get("pending_sync_sim_id"):
+                sync_id = st.session_state.pop("pending_sync_sim_id")
+                if sync_id in st.session_state.applications:
+                    st.session_state.queue_radio = sync_id
+                    st.session_state.last_selected_id = sync_id
+
             search_q = st.text_input(
                 "Tìm kiếm nhanh",
-                placeholder="Ví dụ: 1001, Nguyễn Văn An...",
+                placeholder="Nhập mã ID (VD: 100009) hoặc nghề nghiệp...",
                 label_visibility="collapsed",
             )
-            filter_status = st.selectbox(
-                "Lọc trạng thái",
-                ["Tất cả hồ sơ", "Chờ duyệt", "Đã duyệt"],
-                label_visibility="collapsed",
-            )
+            f_col1, f_col2 = st.columns(2, gap="small")
+            with f_col1:
+                filter_status = st.selectbox(
+                    "Trạng thái",
+                    ["Tất cả trạng thái", "Chờ duyệt", "Đã duyệt"],
+                    label_visibility="collapsed",
+                )
+            with f_col2:
+                filter_risk = st.selectbox(
+                    "Mức rủi ro",
+                    ["Tất cả rủi ro", "HIGH", "MEDIUM", "LOW"],
+                    label_visibility="collapsed",
+                )
+
+            clean_q = search_q.strip()
+            searched_id = None
+
+            # Nếu người dùng gõ mã ID (ví dụ: 100009 hoặc #100009):
+            if clean_q:
+                cand_id = clean_q.lstrip("#").strip()
+                if cand_id.isdigit():
+                    searched_id = cand_id
+                    int_id = int(cand_id)
+                    if cand_id not in st.session_state.applications:
+                        with st.spinner(f"Đang tìm hồ sơ #{cand_id} từ Supabase DWH..."):
+                            fetched_app = fetch_application_by_id(int_id)
+                        if fetched_app:
+                            st.session_state.applications[cand_id] = fetched_app
 
             filtered_ids = []
             for aid, app in st.session_state.applications.items():
-                if (
-                    filter_status != "Tất cả hồ sơ"
-                    and app["status"] != filter_status
-                ):
+                if filter_status != "Tất cả trạng thái" and app["status"] != filter_status:
                     continue
-                if (
-                    search_q
-                    and search_q.lower() not in aid.lower()
-                    and search_q.lower() not in app["applicant"].lower()
-                ):
+                if filter_risk != "Tất cả rủi ro" and app["risk_level"] != filter_risk:
                     continue
+                if clean_q:
+                    if searched_id and aid == searched_id:
+                        continue  # Ưu tiên chèn lên đầu danh sách
+                    haystack = f"{aid} {app['applicant']} {app.get('occupation', '')} {app.get('inc_type', '')}".lower()
+                    if clean_q.lower() not in haystack:
+                        continue
                 filtered_ids.append(aid)
 
-            if not filtered_ids:
-                filtered_ids = list(st.session_state.applications.keys())
-
-            def format_queue_option(aid):
-                a = st.session_state.applications[aid]
-                badge = "✓ Đã xử lý" if a["status"] == "Đã duyệt" else "Chờ duyệt"
-                return (
-                    f"**#{aid} • {a['applicant']}** &nbsp; `PD: {a['pd']:.3f}`\n\n"
-                    f"{a['product']} • {a['credit']:.0f}M — {badge}"
+            if searched_id and searched_id in st.session_state.applications:
+                if searched_id not in filtered_ids:
+                    filtered_ids.insert(0, searched_id)
+                st.markdown(
+                    f'<div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:6px; padding:4px 8px; margin:2px 0 4px 0; font-size:0.74rem; color:#065F46;">'
+                    f"✓ Tìm thấy hồ sơ <b>#{searched_id}</b> trực tiếp từ Supabase DWH</div>",
+                    unsafe_allow_html=True,
                 )
 
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            if not filtered_ids:
+                st.info(f"Không có hồ sơ nào khớp bộ lọc hiện tại. Đang hiển thị toàn bộ danh sách.")
+                filtered_ids = list(st.session_state.applications.keys())
 
-            selected_id = st.radio(
-                "Chọn hồ sơ thẩm định:",
-                options=filtered_ids,
-                format_func=format_queue_option,
-                label_visibility="collapsed",
-                key="queue_radio",
-            )
+            queue_labels = {
+                aid: (
+                    f"{'🟢' if a['risk_level'] == 'LOW' else ('🟡' if a['risk_level'] == 'MEDIUM' else '🔴')} "
+                    f"**#{aid} • {a['applicant']}** &nbsp; `PD: {a['pd']:.3f}`\n\n"
+                    f"{a['product']} • {a['credit']:,.1f}{a.get('unit_suffix', 'M')} — "
+                    f"{'✓ Đã xử lý' if a['status'] == 'Đã duyệt' else 'Chờ duyệt'}"
+                )
+                for aid, a in ((fid, st.session_state.applications[fid]) for fid in filtered_ids)
+            }
+
+            def format_queue_option(aid):
+                return queue_labels.get(aid, f"#{aid}")
+
+            # Đảm bảo radio không bị lỗi out-of-bounds và ưu tiên chọn đúng hồ sơ vừa tìm
+            if searched_id and searched_id in filtered_ids:
+                if st.session_state.get("queue_radio") != searched_id:
+                    st.session_state.queue_radio = searched_id
+
+            if "queue_radio" in st.session_state and st.session_state.queue_radio not in filtered_ids:
+                st.session_state.queue_radio = filtered_ids[0]
+
+            # Cuộn độc lập cho Hàng đợi để không đẩy Panel Quyết định trôi xuống dưới
+            with st.container(height=320, border=False):
+                selected_id = st.radio(
+                    "Chọn hồ sơ thẩm định:",
+                    options=filtered_ids,
+                    format_func=format_queue_option,
+                    label_visibility="collapsed",
+                    key="queue_radio",
+                )
+
+            # Nút nạp thêm hồ sơ từ Supabase DWH (phân trang trực tiếp)
+            col_btn, col_info = st.columns([1.2, 0.8])
+            with col_btn:
+                is_live = st.session_state.get("is_live_db", False)
+                if st.button(
+                    "➕ Nạp thêm 20 hồ sơ",
+                    use_container_width=True,
+                    disabled=not is_live,
+                    help="Tải thêm 20 hồ sơ tiếp theo từ Kho Supabase DWH (307,511 hồ sơ)",
+                ):
+                    with st.spinner("Đang nạp từ Supabase..."):
+                        cur_real_cnt = sum(1 for a in st.session_state.applications.values() if a.get("is_real_dwh"))
+                        more_batch = fetch_live_applications_batch(limit=20, offset=cur_real_cnt)
+                        if more_batch:
+                            st.session_state.applications.update(more_batch)
+                            st.toast(f"✅ Đã nạp thành công {len(more_batch)} hồ sơ mới!", icon="📥")
+                            st.rerun()
+            with col_info:
+                dwh_label = "307.5k" if st.session_state.get("is_live_db") else "Offline"
+                st.markdown(
+                    f"""
+                    <div style="font-size:0.7rem; color:#64748B; text-align:right; padding-top:4px;">
+                        Hiển thị: <b>{len(filtered_ids)}/{len(st.session_state.applications)}</b><br>
+                        (Kho DWH: <b>{dwh_label}</b>)
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             # Reset ghi chú nháp và đồng bộ lựa chọn quyết định khi chuyển hồ sơ
             if selected_id != st.session_state.last_selected_id:
                 st.session_state.last_selected_id = selected_id
                 st.session_state.draft_note = ""
+                st.session_state.draft_note_area = ""
                 st.session_state.decision_radio = st.session_state.applications[selected_id].get(
                     "default_decision", "✓ Phê duyệt"
                 )
@@ -268,30 +375,41 @@ def render_tab_core():
                     ' color:#334155;">Ghi chú thẩm định & Căn cứ:</span>',
                     unsafe_allow_html=True,
                 )
+
+            u_sfx = active_app.get("unit_suffix", "M")
             with col_autofill:
                 if st.button("✨ Điền mẫu nhanh", use_container_width=True):
                     if "Phê duyệt" in chosen_decision:
-                        st.session_state.draft_note = (
-                            f"Đồng ý cấp tín dụng {active_app['credit']}M cho"
-                            f" KH {active_app['applicant']}. Điểm rủi ro"
+                        auto_txt = (
+                            f"Đồng ý cấp tín dụng {active_app['credit']:,.1f}{u_sfx} cho"
+                            f" KH #{active_app['id']} ({active_app['applicant']}). Điểm rủi ro"
                             f" {active_app['pd']:.3f} < {REVIEW_THRESHOLD:.2f}."
                         )
                     elif "Xem xét" in chosen_decision:
-                        st.session_state.draft_note = (
-                            f"Hồ sơ có điểm rủi ro {active_app['pd']:.3f} nằm"
+                        auto_txt = (
+                            f"Hồ sơ #{active_app['id']} có điểm rủi ro {active_app['pd']:.3f} nằm"
                             f" trong vùng [{REVIEW_THRESHOLD:.2f}, {DECLINE_THRESHOLD:.2f})."
-                            f" Cần xác minh thêm dòng tiền của KH {active_app['applicant']}."
+                            f" Cần xác minh thêm dòng tiền của KH ({active_app['applicant']})."
                         )
                     else:
-                        st.session_state.draft_note = (
-                            f"Từ chối cấp tín dụng do điểm rủi ro"
-                            f" {active_app['pd']:.3f} >= {DECLINE_THRESHOLD:.2f}"
-                            " và hệ số tín dụng/thu nhập cao."
+                        auto_txt = (
+                            f"Từ chối cấp tín dụng {active_app['credit']:,.1f}{u_sfx} do điểm rủi ro"
+                            f" {active_app['pd']:.3f} >= {DECLINE_THRESHOLD:.2f}."
                         )
+                    st.session_state.draft_note = auto_txt
+                    st.session_state.draft_note_area = auto_txt
+
+            if st.session_state.pop("pending_clear_note", False):
+                st.session_state.draft_note = ""
+                st.session_state.draft_note_area = ""
+            elif st.session_state.get("pending_autofill_note") is not None:
+                pushed_note = st.session_state.pop("pending_autofill_note")
+                st.session_state.draft_note = pushed_note
+                st.session_state.draft_note_area = pushed_note
 
             note_val = st.text_area(
                 "Ghi chú thẩm định",
-                value=st.session_state.draft_note,
+                key="draft_note_area",
                 height=72,
                 placeholder=(
                     "Nhập căn cứ nghiệp vụ (VD: Thu nhập ổn định, đòn bẩy trong ngưỡng an toàn)..."
@@ -315,24 +433,30 @@ def render_tab_core():
                 ):
                     st.session_state.applications[selected_id]["status"] = "Đã duyệt"
                     st.session_state.applications[selected_id]["default_decision"] = chosen_decision
-                    st.session_state.audit_logs.insert(
-                        0,
-                        {
-                            "Mã GD": f"DEC-{901 + len(st.session_state.audit_logs)}",
-                            "Mã Hồ Sơ": f"#{selected_id}",
-                            "Khách Hàng": active_app["applicant"],
-                            "Quyết Định": chosen_decision.replace("✓ ", "").replace("👁 ", "").replace("✕ ", ""),
-                            "Mã Lý Do": chosen_reason,
-                            "Ghi Chú Nghiệp Vụ": (
-                                note_val.strip()
-                                if note_val.strip()
-                                else "Ghi nhận quyết định theo quy trình thẩm định chuẩn."
-                            ),
-                            "Cán Bộ Thẩm Định": "Officer",
-                            "Thời Gian Ghi Nhận": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        },
-                    )
-                    st.session_state.draft_note = ""
+                    new_log_entry = {
+                        "Mã GD": f"DEC-{len(st.session_state.audit_logs) + 1:03d}",
+                        "Mã Hồ Sơ": f"#{selected_id}",
+                        "Khách Hàng": f"#{selected_id} • {active_app['applicant']}",
+                        "Quyết Định": chosen_decision.replace("✓ ", "").replace("👁 ", "").replace("✕ ", ""),
+                        "Mã Lý Do": chosen_reason,
+                        "Ghi Chú Nghiệp Vụ": (
+                            note_val.strip()
+                            if note_val.strip()
+                            else "Ghi nhận quyết định theo quy trình thẩm định chuẩn."
+                        ),
+                        "Cán Bộ Thẩm Định": "Officer",
+                        "Thời Gian Ghi Nhận": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                    save_ok = save_audit_decision_to_db(new_log_entry)
+                    if save_ok:
+                        refreshed_logs = fetch_audit_history_from_db()
+                        if refreshed_logs is not None:
+                            st.session_state.audit_logs = refreshed_logs
+                        else:
+                            st.session_state.audit_logs.insert(0, new_log_entry)
+                    else:
+                        st.session_state.audit_logs.insert(0, new_log_entry)
+                    st.session_state.pending_clear_note = True
                     st.toast(
                         f"Đã lưu quyết định cho hồ sơ #{selected_id} vào bảng app.credit_decisions!",
                         icon="✅",
@@ -372,17 +496,26 @@ def render_tab_core():
                 f" (risk_score = {active_app['pd']:.3f} ≥ {DECLINE_THRESHOLD:.2f})."
             )
 
+        t_val = active_app.get("target")
+        if t_val == 1:
+            gt_pill = '<span style="background:#FEE2E2; color:#991B1B; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px; border:1px solid #FECACA;">Đối chiếu lịch sử: TARGET=1 (Khó khăn TT)</span>'
+        elif t_val == 0:
+            gt_pill = '<span style="background:#DCFCE7; color:#166534; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px; border:1px solid #BBF7D0;">Đối chiếu lịch sử: TARGET=0 (Trả tốt)</span>'
+        else:
+            gt_pill = '<span style="background:#F1F5F9; color:#475569; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px;">Chưa có nhãn (Test)</span>'
+
         st.markdown(
             f"""
-<div style="background:{banner_bg}; border:1px solid {banner_border}; border-left:5px solid {banner_border}; border-radius:12px; padding:14px 18px; margin-bottom: 14px;">
+<div style="background:{banner_bg}; border:1px solid {banner_border}; border-left:5px solid {banner_border}; border-radius:12px; padding:14px 18px; margin-bottom: 10px;">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <span style="background:{badge_bg}; color:#FFFFFF; font-size:0.68rem; font-weight:700; padding:3px 10px; border-radius:999px; letter-spacing:0.04em;">
                 MỨC RỦI RO: {r_level}
             </span>
             <span class="mono" style="font-size:0.76rem; font-weight:700; color:#1E293B;">
                 KH: {active_app['applicant'].upper()} • #{active_app['id']}
             </span>
+            {gt_pill}
         </div>
         <div class="mono" style="font-size:0.72rem; font-weight:600; color:#334155; background:rgba(255,255,255,0.85); padding:3px 10px; border-radius:6px; border:1px solid rgba(15,23,42,0.08);">
             Model: {MODEL_NAME_LABEL} • SLA: {active_app['sla']}
@@ -434,7 +567,8 @@ def render_tab_core():
 
         # 3. Tình hình Tài chính & Tỷ số Tín dụng / Thu nhập
         with st.container(border=True):
-            leverage = active_app["credit"] / active_app["income"]
+            inc_val = active_app["income"]
+            leverage = (active_app["credit"] / inc_val) if inc_val > 0 else 0.0
             lev_pct = min((leverage / 4.0) * 100, 100)
             lev_color = (
                 "#10B981"
@@ -450,31 +584,32 @@ def render_tab_core():
                     else "Vượt ngưỡng cao (> 2.5x)"
                 )
             )
+            u_sfx = active_app.get("unit_suffix", "M")
 
             st.markdown(
                 f"""
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
     <span class="section-title" style="margin-bottom:0;">📊 TÌNH HÌNH TÀI CHÍNH & HỆ SỐ TÍN DỤNG / THU NHẬP</span>
     <span style="background:#F1F5F9; color:#334155; font-size:0.72rem; font-weight:600; padding:2px 10px; border-radius:6px;">
-        {active_app['product']}
+        {active_app['product']} • Đơn vị nguồn ({u_sfx})
     </span>
 </div>
 <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:12px;">
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Thu nhập khai báo</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['income']:.1f}M</div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['income']:,.1f}{u_sfx}</div>
     </div>
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Giá trị tín dụng (Credit)</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#1D4ED8; margin-top:2px; white-space:nowrap;">{active_app['credit']:.1f}M</div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#1D4ED8; margin-top:2px; white-space:nowrap;">{active_app['credit']:,.1f}{u_sfx}</div>
     </div>
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Khoản trả định kỳ (Annuity)</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['annuity']:.1f}M <span style="font-size:0.72rem; font-weight:600; color:#64748B;">/ kỳ</span></div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['annuity']:,.1f}{u_sfx} <span style="font-size:0.72rem; font-weight:600; color:#64748B;">/ kỳ</span></div>
     </div>
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Giá trị hàng hóa (Goods)</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['goods']:.1f}M</div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['goods']:,.1f}{u_sfx}</div>
     </div>
 </div>
 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 14px;">
@@ -498,16 +633,22 @@ def render_tab_core():
 
         # 4. Thông tin Khách hàng & Lịch sử Tín dụng (2 cột)
         c_demo, c_hist = st.columns(2, gap="medium")
+        occ_disp = active_app.get("occupation", "Chưa khai báo (Unknown)")
+        fam_disp = active_app.get("family_info", active_app["marital"])
+        ext1_disp = active_app.get("ext1", "N/A")
+        ext2_disp = active_app.get("ext2", "N/A")
+        ext3_disp = active_app.get("ext3", "N/A")
+
         with c_demo:
             with st.container(border=True):
                 st.markdown(
                     f"""
 <div class="section-title">👤 THÔNG TIN KHÁCH HÀNG</div>
 <div class="kv-row"><span class="kv-label">Độ tuổi / Nhóm:</span><span class="kv-val">{active_app['age']}</span></div>
+<div class="kv-row"><span class="kv-label">Nghề nghiệp / Thu nhập:</span><span class="kv-val">{occ_disp} ({active_app['inc_type']})</span></div>
 <div class="kv-row"><span class="kv-label">Thời gian làm việc:</span><span class="kv-val">{active_app['emp_years']}</span></div>
 <div class="kv-row"><span class="kv-label">Học vấn:</span><span class="kv-val">{active_app['edu']}</span></div>
-<div class="kv-row"><span class="kv-label">Nguồn thu nhập:</span><span class="kv-val">{active_app['inc_type']}</span></div>
-<div class="kv-row"><span class="kv-label">Tình trạng hôn nhân:</span><span class="kv-val">{active_app['marital']}</span></div>
+<div class="kv-row"><span class="kv-label">Gia đình & Hôn nhân:</span><span class="kv-val">{active_app['marital']} • {fam_disp}</span></div>
 <div class="kv-row"><span class="kv-label">Tài sản sở hữu:</span><span class="kv-val">{active_app['assets']}</span></div>
 """,
                     unsafe_allow_html=True,
@@ -517,12 +658,12 @@ def render_tab_core():
             with st.container(border=True):
                 st.markdown(
                     f"""
-<div class="section-title">🏛️ LỊCH SỬ TÍN DỤNG QUÁ KHỨ</div>
+<div class="section-title">🏛️ LỊCH SỬ TÍN DỤNG & ĐIỂM NGUỒN NGOÀI</div>
 <div class="kv-row"><span class="kv-label">Hồ sơ trước (DAYS_DECISION ≤ 0):</span><span class="kv-val mono">{active_app['hist_total']}</span></div>
-<div class="kv-row"><span class="kv-label">Đã từng được duyệt:</span><span class="kv-val mono" style="color:#059669;">{active_app['hist_app']}</span></div>
-<div class="kv-row"><span class="kv-label">Đã từng bị từ chối:</span><span class="kv-val mono" style="color:#E11D48;">{active_app['hist_ref']}</span></div>
+<div class="kv-row"><span class="kv-label">Đã từng được duyệt / Từ chối:</span><span class="kv-val mono"><span style="color:#059669;">{active_app['hist_app']}</span> / <span style="color:#E11D48;">{active_app['hist_ref']}</span></span></div>
 <div class="kv-row"><span class="kv-label">Tỷ lệ duyệt quá khứ:</span><span class="kv-val mono">{active_app['hist_rate']}</span></div>
-<div class="kv-row"><span class="kv-label">Điểm CIC / External Score 3:</span><span class="kv-val mono" style="color:#1D4ED8;">{active_app['ext3']}</span></div>
+<div class="kv-row"><span class="kv-label">Điểm nguồn ngoài (EXT_1 / EXT_2):</span><span class="kv-val mono" style="color:#1D4ED8;">{ext1_disp} / {ext2_disp}</span></div>
+<div class="kv-row"><span class="kv-label">Điểm CIC / External Score 3:</span><span class="kv-val mono" style="color:#1D4ED8;">{ext3_disp}</span></div>
 <div class="kv-row"><span class="kv-label">Trạng thái nợ quá hạn:</span><span class="kv-val">{active_app['dpd']}</span></div>
 """,
                     unsafe_allow_html=True,

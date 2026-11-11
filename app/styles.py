@@ -82,13 +82,13 @@ def inject_enterprise_css():
         border: 1px solid #E2E8F0 !important;
         border-radius: 12px !important;
         box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
-        padding: 1rem 1.15rem !important;
-        margin-bottom: 6px !important;
+        padding: 0.95rem 1.1rem !important;
+        margin-bottom: 4px !important;
     }
 
     /* 4. Khoảng cách dọc tiêu chuẩn giữa các phần tử - Tránh đè lên nhau */
     div[data-testid="stVerticalBlock"] {
-        gap: 0.95rem !important;
+        gap: 0.72rem !important;
     }
 
     /* 5. Nút bấm Primary chuẩn Ngân hàng */
@@ -147,12 +147,12 @@ def inject_enterprise_css():
     .st-key-queue_radio [data-testid="stRadioOption"] {
         width: 100% !important;
         min-width: 100% !important;
-        min-height: 68px !important;
-        height: 68px !important;
+        min-height: 60px !important;
+        height: auto !important;
         background-color: #FFFFFF !important;
         border: 1.5px solid #CBD5E1 !important;
         border-radius: 11px !important;
-        padding: 10px 14px !important;
+        padding: 9px 12px !important;
         margin: 0 !important;
         display: flex !important;
         align-items: center !important;
@@ -389,8 +389,26 @@ def inject_enterprise_css():
 
 def render_top_header():
     """Header ghim cố định ở đầu trang, chuẩn thương hiệu Home Credit."""
+    is_live = st.session_state.get("is_live_db", False)
+    if is_live:
+        status_pill = (
+            '<div style="display:flex; align-items:center; gap:6px; background:#ECFDF5; '
+            'border:1px solid #A7F3D0; border-radius:999px; padding:4px 11px; '
+            'font-size:0.72rem; font-weight:600; color:#065F46;">'
+            '<span style="width:7px; height:7px; border-radius:50%; background:#10B981; display:inline-block;"></span>'
+            'Supabase Live DWH • 307,511 hồ sơ</div>'
+        )
+    else:
+        status_pill = (
+            '<div style="display:flex; align-items:center; gap:6px; background:#FFFBEB; '
+            'border:1px solid #FDE68A; border-radius:999px; padding:4px 11px; '
+            'font-size:0.72rem; font-weight:600; color:#92400E;">'
+            '<span style="width:7px; height:7px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>'
+            'Offline Mode • Cohort mẫu</div>'
+        )
+
     st.markdown(
-        """
+        f"""
 <div class="enterprise-header">
     <div style="display:flex; align-items:center; gap:12px;">
         <div style="width:38px; height:38px; border-radius:8px; background:#1D4ED8; color:#FFF; font-weight:700; font-size:0.92rem; display:flex; align-items:center; justify-content:center; box-shadow: 0 2px 4px rgba(29,78,216,0.2);">
@@ -400,16 +418,20 @@ def render_top_header():
             <div style="font-weight:700; font-size:1.02rem; color:#0F172A; letter-spacing:-0.01em;">
                 CỔNG THẨM ĐỊNH TÍN DỤNG & HỖ TRỢ QUYẾT ĐỊNH (DSS)
             </div>
+            <div style="font-size:0.7rem; color:#64748B;">
+                Đơn vị nguồn chuẩn hóa SI (K = 10³, M = 10⁶, B = 10⁹) • Mô hình Giải thích được ML
+            </div>
         </div>
     </div>
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        {status_pill}
         <div style="display:flex; align-items:center; gap:8px; background:#EFF6FF; border:1px solid #DBEAFE; border-radius:8px; padding:5px 12px;">
             <div style="width:26px; height:26px; border-radius:50%; background:#1D4ED8; color:#FFF; font-size:0.7rem; font-weight:700; display:flex; align-items:center; justify-content:center;">
                 OF
             </div>
             <div style="line-height:1.2;">
                 <div style="font-size:0.78rem; font-weight:700; color:#1E3A8A;">Officer</div>
-                <div style="font-size:0.65rem; color:#3B82F6; font-weight:500;">Hạn mức duyệt ≤ 500M</div>
+                <div style="font-size:0.65rem; color:#3B82F6; font-weight:500;">Cán bộ thẩm định rủi ro</div>
             </div>
         </div>
     </div>

@@ -177,6 +177,7 @@ def main():
     if not dsn:
         parser.error('Set DATABASE_URL in .env or environment; see .env.example')
     with psycopg.connect(dsn,autocommit=True) as conn:
+        conn.execute('SET statement_timeout = 0')
         if args.command=='init-db':
             init_db(conn)
             print('Core schema and views initialized (no data deleted).')
