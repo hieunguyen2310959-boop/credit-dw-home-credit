@@ -61,6 +61,7 @@ def load_bundle(models_root, relative_dir, model_run_id=None) -> ModelBundle:
     return ModelBundle(pipe, manifest, policy, mean, model_run_id, warn, str(model_dir))
 
 
+# ------------------------------------------------------------------ validate
 def _to_number(name, v, errors):
     if v is None:
         return None
@@ -133,6 +134,7 @@ def score_clean(bundle: ModelBundle, clean: dict) -> float:
     return p
 
 
+# ------------------------------------------------------------------ explain
 def _origin(transformed_name: str) -> str:
     n = transformed_name
     if n.startswith("num__"):
@@ -164,6 +166,7 @@ def model_factors(bundle: ModelBundle, clean: dict, top_k: int = 3) -> list:
              "direction": "raises_risk" if v > 0 else "lowers_risk"} for k, v in ranked if v != 0.0]
 
 
+# ------------------------------------------------------------------ assess
 def assess(bundle: ModelBundle, application_id: int, features: dict, *,
            policy: PolicyConfig | None = None, model_run_id: int | None = None, top_k: int = 3) -> dict:
     clean = validate_features(features)

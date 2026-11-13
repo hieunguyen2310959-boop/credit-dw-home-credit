@@ -16,7 +16,7 @@ APP_COLS = C.APP_COLUMNS
 
 
 def tiny_sources():
-    # Cohort mẫu 3 hồ sơ và 5 bản ghi lịch sử phục vụ kiểm thử đơn vị
+    # Cung 3 ho so + 5 lich su nhu tests/test_etl.py cua nguoi 1
     app = pd.DataFrame([
         [1001, 1, "Cash loans", 100, 200, 10, -10957, -365, "Working", "Higher education", .3, .4, .5],
         [1002, 0, "Revolving loans", 0, 300, 15, -18263, 365243, "Pensioner", "", np.nan, np.nan, .6],
@@ -29,7 +29,7 @@ def tiny_sources():
     return app, prev
 
 
-def test_feature_contract_matches_etl_rules():
+def test_feature_contract_matches_person1_rules():
     X, lab, rep = F.build_feature_table(*tiny_sources())
     r = X.set_index("application_id")
     assert list(X.columns) == ["application_id"] + C.PREDICTORS and "target" not in X

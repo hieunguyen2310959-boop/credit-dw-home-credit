@@ -1,4 +1,5 @@
--- Bảng nghiệp vụ lưu vết quyết định thẩm định (Web DSS).
+-- Schema & bang luu vet quyet dinh cua Can bo tham dinh (Web DSS - Thanh vien C).
+-- Tach khoi sql/001_schema.sql de giu nguyen bo schema core va test tich hop cua Thanh vien A.
 CREATE SCHEMA IF NOT EXISTS app;
 
 CREATE TABLE IF NOT EXISTS app.credit_decisions (
