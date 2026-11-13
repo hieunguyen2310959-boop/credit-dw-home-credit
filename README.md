@@ -16,7 +16,7 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc **Star Sch
 - **Thành viên B — Machine Learning & Risk Scoring (Tầng Trí tuệ):**
   - Xây dựng pipeline tiền xử lý và huấn luyện mô hình Logistic Regression theo chuẩn Feature Contract v1 (ROC-AUC tập holdout đạt 0.7424).
   - Tách biệt nhãn mục tiêu (`TARGET`) và mã định danh (`SK_ID_CURR` / `application_id`) khỏi tập thuộc tính dự báo nhằm tránh rò rỉ dữ liệu (data leakage).
-  - Thiết lập chính sách phân tầng rủi ro tín dụng (`policy_v1_illustrative`): Thấp (`< 0.20`), Trung bình (`0.20 – 0.35`), Cao (`>= 0.35`).
+  - Thiết lập chính sách phân tầng rủi ro tín dụng (`policy_v1_illustrative`): Thấp (`< 0.10`), Trung bình (`0.10 – 0.25`), Cao (`>= 0.25`).
   - Cung cấp cơ chế giải thích mô hình (Explainable AI): phân tích đóng góp log-odds (`model_factors`) cho từng thuộc tính giúp cán bộ thẩm định hiểu rõ căn cứ ra quyết định.
   - Xây dựng gói thư viện `credit_ml` hoàn chỉnh kèm 17 unit test kiểm thử nghiêm ngặt tại `ml/tests/`.
 
@@ -27,7 +27,7 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc **Star Sch
   - Phát triển công cụ mô phỏng kịch bản (What-If Simulation): cho phép cán bộ thẩm định điều chỉnh số tiền vay, thu nhập và khẩu vị rủi ro với tái chấm điểm thời gian thực bằng hàm `assess()` của ML.
   - Thiết lập cơ chế kiểm soát an toàn **Fail-Closed**: tự động chặn quyền phê duyệt nếu xảy ra lỗi mô hình ML, ngăn ngừa việc phê duyệt tự động khi mô hình chưa hoàn tất suy luận hợp lệ.
   - Triển khai bảng nhật ký kiểm toán `app.credit_decisions` trên Neon Cloud, đồng bộ hóa quyết định phê duyệt/từ chối kèm mã lý do chuẩn hóa thời gian thực.
-  - Đóng gói bộ 35 automated test cases kiểm thử toàn diện từ logic nghiệp vụ, tính an toàn đến ma trận giao diện người dùng.
+  - Đóng gói bộ 37 automated test cases kiểm thử toàn diện từ logic nghiệp vụ, tính an toàn đến ma trận giao diện người dùng (36 passed, 1 skipped).
 
 ---
 
@@ -144,14 +144,14 @@ Mô hình dự báo rủi ro được đóng gói tại thư mục `ml/`, tuân 
 
 ### 2. Phân tầng Rủi ro & Chính sách Phê duyệt (`policy_v1_illustrative`):
 Mô hình ước lượng xác suất khó khăn tài chính $p = P(\text{TARGET}=1)$:
-- $p < 0.20$ (**Rủi ro THẤP — LOW**): Đề xuất **Phê duyệt tự động** (`APPROVE_SIMULATION`).
-- $0.20 \le p < 0.35$ (**Rủi ro TRUNG BÌNH — MEDIUM**): Đề xuất **Xem xét thêm** (`REVIEW`). Cán bộ tín dụng cần thẩm định bổ sung sao kê lương hoặc tài sản bảo đảm.
-- $p \ge 0.35$ (**Rủi ro CAO — HIGH**): Đề xuất **Từ chối tín dụng** (`DECLINE_SIMULATION`).
+- $p < 0.10$ (**Rủi ro THẤP — LOW**): Đề xuất **Phê duyệt tự động** (`APPROVE_SIMULATION`).
+- $0.10 \le p < 0.25$ (**Rủi ro TRUNG BÌNH — MEDIUM**): Đề xuất **Xem xét thêm** (`REVIEW`). Cán bộ tín dụng cần thẩm định bổ sung sao kê lương hoặc tài sản bảo đảm.
+- $p \ge 0.25$ (**Rủi ro CAO — HIGH**): Đề xuất **Từ chối tín dụng** (`DECLINE_SIMULATION`).
 
 ### 3. Quy tắc Đè Chính sách Nghiệp vụ (Policy Override):
 - **Cảnh báo thiếu dữ liệu tín dụng ngoài (`ALL_EXTERNAL_SCORES_MISSING`):**  
-  Trong thực tế thẩm định, nếu một hồ sơ hoàn toàn không có cả 3 điểm xếp hạng từ trung tâm tín dụng bên ngoài (`EXT_SOURCE_1, 2, 3` — tương đương thông tin CIC), dù mô hình ước lượng xác suất rủi ro thấp ($p < 0.20$, ví dụ hồ sơ `#100402`), chính sách rủi ro **bắt buộc ghi đè** khuyến nghị sang **`REVIEW`** (hiển thị banner màu vàng).  
-  Điều này ngăn ngừa hiện tượng gian lận hồ sơ trắng (clean slate fraud), buộc cán bộ thẩm định phải kiểm tra thực địa trước khi phê duyệt.
+  Trong thực tế thẩm định, nếu một hồ sơ hoàn toàn không có cả 3 điểm xếp hạng từ trung tâm tín dụng bên ngoài (`EXT_SOURCE_1, 2, 3`), dù mô hình ước lượng xác suất rủi ro thấp ($p < 0.10$, ví dụ hồ sơ `#100402` với $p \approx 0.094$), chính sách rủi ro **bắt buộc ghi đè** khuyến nghị sang **`REVIEW`** (hiển thị banner màu vàng).  
+  Điều này ngăn ngừa hiện tượng hồ sơ trắng (clean slate), buộc cán bộ thẩm định phải kiểm tra thực địa trước khi phê duyệt.
 
 ### 4. Giải thích Đóng góp Thuộc tính (Explainable Log-Odds):
 Xác suất rủi ro được giải thích trực quan bằng tổng logit:
@@ -283,6 +283,9 @@ python -m pytest ml/tests tests/test_app_safety.py tests/test_ui_matrix.py -v
    - Kiểm tra hành vi giao diện khi mô hình ML xảy ra ngoại lệ.
    - Kiểm tra chức năng lưu quyết định thẩm định và giữ lại ghi chú của cán bộ khi có lỗi.
    - Kiểm tra đầy đủ các chiều phân tích OLAP ở cả chế độ Online và Offline.
+4. **2 Demo UI & Error Tests (`tests/test_demo_ui.py`):**
+   - Kiểm tra luồng thẩm định, chính sách đè khuyến nghị và đường dẫn xử lý lỗi khi DB hoặc mô hình gián đoạn.
+   - Kiểm tra tích hợp cơ sở dữ liệu mẫu cục bộ (khi có môi trường kiểm thử).
 
 ---
 
@@ -327,7 +330,7 @@ flowchart LR
 
 ### Bước 4: Trải nghiệm Cơ chế Đè Chính sách (Policy Override)
 - Tại ô tìm kiếm, gõ mã hồ sơ **`100402`**:
-- Hồ sơ này có xác suất rủi ro ước lượng rất thấp ($p \approx 0.094 < 0.20$, mức `LOW`).
+- Hồ sơ này có xác suất rủi ro ước lượng rất thấp ($p \approx 0.094 < 0.10$, mức `LOW`).
 - **Quy tắc bảo vệ ngân hàng kích hoạt:** Do hồ sơ này **thiếu toàn bộ 3 điểm tín dụng bên ngoài** (`EXT_SOURCE_1, 2, 3`), chính sách rủi ro `policy_v1_illustrative` tự động đè khuyến nghị sang **`REVIEW`** (hiển thị banner màu vàng với mã lý do `ALL_EXTERNAL_SCORES_MISSING`).
 - Cơ chế này kết hợp giữa điểm số mô hình và chính sách quản trị rủi ro để xử lý các hồ sơ thiếu dữ liệu quan trọng, tránh việc phê duyệt tự động khi chưa đủ căn cứ xác minh.
 
