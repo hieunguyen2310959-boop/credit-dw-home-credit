@@ -50,10 +50,8 @@ def _format_queue_label(aid: str, app_record: dict) -> str:
     pd_val = app_record.get("pd")
     rec_code = app_record.get("recommendation_code", "")
     if app_record.get("ml_error") or pd_val is None or r_level == "ERROR":
-        status_dot = "●"
         pd_badge = "PD: ERROR (ML_ERROR)"
     else:
-        status_dot = "●"
         pd_badge = f"PD: {float(pd_val):.3f}"
         if r_level == "LOW" and rec_code == "REVIEW":
             pd_badge = f"PD: {float(pd_val):.3f} • REVIEW"
@@ -65,7 +63,7 @@ def _format_queue_label(aid: str, app_record: dict) -> str:
         else "Chờ duyệt"
     )
     return (
-        f"{status_dot} **#{aid} • {app_record['applicant']}** &nbsp; `{pd_badge}`\n\n"
+        f"**#{aid} • {app_record['applicant']}** &nbsp; `{pd_badge}`\n\n"
         f"{app_record['product']} • {credit_disp} — {status_lbl}"
     )
 

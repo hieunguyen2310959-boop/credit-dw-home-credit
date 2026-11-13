@@ -144,45 +144,51 @@ def inject_enterprise_css():
     .st-key-queue_radio [data-testid="stRadioOption"] {
         width: 100% !important;
         min-width: 100% !important;
-        min-height: 60px !important;
+        min-height: 56px !important;
         height: auto !important;
         background-color: #FFFFFF !important;
-        border: 1.5px solid #CBD5E1 !important;
-        border-radius: 11px !important;
-        padding: 9px 12px !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 10px !important;
+        padding: 9px 14px !important;
         margin: 0 !important;
         display: flex !important;
         align-items: center !important;
         box-sizing: border-box !important;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03) !important;
         cursor: pointer !important;
-        transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transition: all 0.15s ease !important;
     }
 
     .st-key-queue_radio [data-testid="stRadioOption"]:hover {
-        border-color: #3B82F6 !important;
+        border-color: #93C5FD !important;
         background-color: #F8FAFC !important;
-        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08) !important;
+        box-shadow: 0 3px 8px rgba(37, 99, 235, 0.06) !important;
         transform: translateY(-1px);
     }
 
     .st-key-queue_radio [data-testid="stRadioOption"][data-selected="true"],
     .st-key-queue_radio div[data-testid="stRadioGroup"] > div[data-selected="true"] [data-testid="stRadioOption"],
     .st-key-queue_radio [data-testid="stRadioOption"]:has(input:checked) {
-        border: 2px solid #1D4ED8 !important;
-        background: linear-gradient(180deg, #EFF6FF 0%, #DBEAFE 100%) !important;
-        box-shadow: 0 0 0 1px #1D4ED8, 0 4px 12px rgba(29, 78, 216, 0.15) !important;
+        border: 1.5px solid #1D4ED8 !important;
+        border-left: 4px solid #1D4ED8 !important;
+        background: linear-gradient(180deg, #F0F7FF 0%, #E0EFFF 100%) !important;
+        box-shadow: 0 2px 8px rgba(29, 78, 216, 0.12) !important;
+    }
+
+    /* Radio button circle hidden for modern list card appearance */
+    .st-key-queue_radio [data-testid="stRadioOption"] span:first-child,
+    .st-key-queue_radio [data-testid="stRadioOption"] input,
+    .st-key-queue_radio [data-testid="stRadioOption"] div[class*="e1dm8mpf4"] {
+        display: none !important;
+        width: 0px !important;
+        height: 0px !important;
+        margin: 0px !important;
     }
 
     .st-key-queue_radio [data-testid="stRadioOption"] > div {
         width: 100% !important;
         display: flex !important;
         align-items: center !important;
-    }
-
-    .st-key-queue_radio [data-testid="stRadioOption"] div[class*="e1dm8mpf4"] {
-        margin-right: 12px !important;
-        flex-shrink: 0 !important;
     }
 
     .st-key-queue_radio [data-testid="stRadioOption"] div[data-testid="stMarkdownContainer"] {
@@ -199,7 +205,7 @@ def inject_enterprise_css():
         overflow: hidden !important;
     }
     .st-key-queue_radio [data-testid="stRadioOption"] div[data-testid="stMarkdownContainer"] p:first-child {
-        font-size: 0.86rem !important;
+        font-size: 0.84rem !important;
         font-weight: 700 !important;
         color: #0F172A !important;
         display: flex !important;
@@ -211,6 +217,26 @@ def inject_enterprise_css():
         font-size: 0.74rem !important;
         color: #64748B !important;
         margin-top: 3px !important;
+    }
+
+    .st-key-queue_radio [data-testid="stRadioOption"] code {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        padding: 2px 8px !important;
+        border-radius: 6px !important;
+        background-color: #F1F5F9 !important;
+        color: #334155 !important;
+        border: 1px solid #E2E8F0 !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    .st-key-queue_radio [data-testid="stRadioOption"][data-selected="true"] code,
+    .st-key-queue_radio [data-testid="stRadioOption"]:has(input:checked) code {
+        background-color: #FFFFFF !important;
+        color: #1D4ED8 !important;
+        border-color: #BFDBFE !important;
+        box-shadow: 0 1px 2px rgba(29, 78, 216, 0.1) !important;
     }
 
     /* Decision button segment */
