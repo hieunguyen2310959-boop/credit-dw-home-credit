@@ -3,6 +3,8 @@ TAB 1: THẨM ĐỊNH HỒ SƠ TÍN DỤNG (CORE DSS)
 Bao gồm thanh KPI Ribbon, Hàng đợi hồ sơ (Queue), Panel quyết định, Đồng hồ rủi ro Gauge và Hồ sơ 360 độ.
 """
 
+import html
+import inspect
 from datetime import datetime
 import plotly.graph_objects as go
 import streamlit as st
@@ -15,11 +17,262 @@ from app.data_adapter import (
     fetch_audit_history_from_db,
     fetch_application_by_id,
     fetch_live_applications_batch,
+    get_last_db_error,
+    get_db_vendor_label,
+    sync_app_status_from_logs,
 )
 
 
+def _fmt_money(val: float | None, u_sfx: str) -> str:
+    """Định dạng số tiền giữ nguyên N/A cho giá trị thiếu ('Thiếu khác 0')."""
+    if val is None:
+        return "N/A"
+    return f"{float(val):,.1f}{u_sfx}"
+
+
+def _format_alert_items(alerts: list) -> list[str]:
+    """Chuẩn hóa danh sách cảnh báo từ Policy/ML thành các chuỗi dễ đọc."""
+    formatted = []
+    for item in alerts or []:
+        if isinstance(item, dict):
+            code = str(item.get("code", "ALERT")).strip()
+            msg = str(item.get("message", "")).strip()
+            sev = str(item.get("severity", "")).strip().upper()
+            prefix = f"[{sev}] " if sev else ""
+            formatted.append(f"{prefix}{code}: {msg}" if msg else f"{prefix}{code}")
+        else:
+            formatted.append(str(item))
+    return formatted
+
+
+def _format_queue_label(aid: str, app_record: dict) -> str:
+    """Định dạng nhãn hồ sơ trong hàng đợi, an toàn khi pd=None (ML_ERROR)."""
+    r_level = app_record.get("risk_level", "ERROR")
+    pd_val = app_record.get("pd")
+    rec_code = app_record.get("recommendation_code", "")
+    if app_record.get("ml_error") or pd_val is None or r_level == "ERROR":
+        icon = "⚠️"
+        pd_badge = "PD: ERROR (ML_ERROR)"
+    else:
+        icon = "🟢" if r_level == "LOW" else ("🟡" if r_level == "MEDIUM" else "🔴")
+        pd_badge = f"PD: {float(pd_val):.3f}"
+        if r_level == "LOW" and rec_code == "REVIEW":
+            icon = "🟡"
+            pd_badge = f"PD: {float(pd_val):.3f} • REVIEW"
+    u_sfx = app_record.get("unit_suffix", "K")
+    credit_disp = _fmt_money(app_record.get("credit"), u_sfx)
+    status_lbl = (
+        "✓ Đã xử lý"
+        if app_record.get("status") in ("Đã xử lý", "Đã duyệt")
+        else "Chờ duyệt"
+    )
+    return (
+        f"{icon} **#{aid} • {app_record['applicant']}** &nbsp; `{pd_badge}`\n\n"
+        f"{app_record['product']} • {credit_disp} — {status_lbl}"
+    )
+
+
+def _resolve_recommendation_banner(
+    active_app: dict,
+    review_threshold: float,
+    decline_threshold: float,
+) -> dict:
+    """Tính toán banner khuyến nghị bám sát Policy (recommendation_code) và Fail-Closed."""
+    pd_val = active_app.get("pd")
+    ml_error = active_app.get("ml_error")
+    r_level = active_app.get("risk_level", "ERROR")
+    rec_code = active_app.get("recommendation_code", "ML_ERROR")
+    alerts_text = _format_alert_items(active_app.get("alerts", []))
+
+    if ml_error or pd_val is None or rec_code == "ML_ERROR" or r_level == "ERROR":
+        err_msg = html.escape(str(ml_error or "Không có điểm rủi ro hợp lệ từ mô hình ML."))
+        return {
+            "bg": "#FFF1F2",
+            "border": "#E11D48",
+            "badge_bg": "#BE123C",
+            "badge_text": "LỖI CHẤM ĐIỂM ML (ML_ERROR)",
+            "title": "Không thể chấm điểm rủi ro ML — Chặn phê duyệt tự động (FAIL-CLOSED)",
+            "subtitle": (
+                f"Mô hình ML không khả dụng hoặc suy luận thất bại ({err_msg})."
+                " Vui lòng kiểm tra pipeline ML trước khi phê duyệt hồ sơ."
+            ),
+            "alerts_text": alerts_text,
+        }
+
+    pd_num = float(pd_val)
+    if rec_code == "APPROVE_SIMULATION":
+        return {
+            "bg": "#ECFDF5",
+            "border": "#10B981",
+            "badge_bg": "#059669",
+            "badge_text": f"MỨC RỦI RO: {r_level} • APPROVE",
+            "title": "Khuyến nghị Hệ thống: Phê Duyệt Hồ Sơ (APPROVE_SIMULATION)",
+            "subtitle": (
+                f"Điểm rủi ro mô hình nằm trong vùng an toàn"
+                f" (risk_score = {pd_num:.3f} < {review_threshold:.2f})."
+            ),
+            "alerts_text": alerts_text,
+        }
+
+    if rec_code == "REVIEW":
+        if r_level == "LOW":
+            sub = (
+                f"Điểm mô hình ở mức LOW (risk_score = {pd_num:.3f} < {review_threshold:.2f}),"
+                " nhưng Policy bắt buộc REVIEW do cảnh báo chất lượng dữ liệu / đòn bẩy."
+            )
+        else:
+            sub = (
+                f"Điểm rủi ro nằm trong vùng cần xem xét kỹ"
+                f" ({review_threshold:.2f} ≤ risk_score = {pd_num:.3f} < {decline_threshold:.2f})."
+                " Khuyến nghị kiểm tra chứng từ thu nhập hoặc chạy What-If."
+            )
+        return {
+            "bg": "#FFFBEB",
+            "border": "#F59E0B",
+            "badge_bg": "#D97706",
+            "badge_text": f"MỨC RỦI RO: {r_level} • REVIEW",
+            "title": "Khuyến nghị Hệ thống: Thẩm Định Bổ Sung (REVIEW)",
+            "subtitle": sub,
+            "alerts_text": alerts_text,
+        }
+
+    return {
+        "bg": "#FFF1F2",
+        "border": "#F43F5E",
+        "badge_bg": "#E11D48",
+        "badge_text": f"MỨC RỦI RO: {r_level} • DECLINE",
+        "title": "Khuyến nghị Hệ thống: Từ Chối Mô Phỏng (DECLINE_SIMULATION)",
+        "subtitle": (
+            f"Điểm rủi ro mô hình vượt ngưỡng từ chối"
+            f" (risk_score = {pd_num:.3f} ≥ {decline_threshold:.2f})."
+        ),
+        "alerts_text": alerts_text,
+    }
+
+
+def _build_autofill_note(
+    active_app: dict,
+    chosen_decision: str,
+    review_threshold: float,
+    decline_threshold: float,
+) -> str:
+    """Tạo nội dung mẫu ghi chú thẩm định, tránh lỗi định dạng khi pd=None."""
+    u_sfx = active_app.get("unit_suffix", "M")
+    pd_val = active_app.get("pd")
+    if active_app.get("ml_error") or pd_val is None:
+        return (
+            f"Hồ sơ #{active_app['id']} ({active_app['applicant']}) đang gặp lỗi chấm điểm ML"
+            f" ({active_app.get('ml_error') or 'ML_ERROR'}). Chuyển xem xét thủ công trước khi quyết định."
+        )
+    pd_num = float(pd_val)
+    credit_disp = _fmt_money(active_app.get("credit"), u_sfx)
+    if "Phê duyệt" in chosen_decision:
+        return (
+            f"Đồng ý cấp tín dụng {credit_disp} cho"
+            f" KH #{active_app['id']} ({active_app['applicant']}). Điểm rủi ro"
+            f" {pd_num:.3f} < {review_threshold:.2f}."
+        )
+    if "Xem xét" in chosen_decision:
+        return (
+            f"Hồ sơ #{active_app['id']} có điểm rủi ro {pd_num:.3f}"
+            f" (khuyến nghị: {active_app.get('recommendation_code', 'REVIEW')})."
+            f" Cần xác minh thêm chứng từ/dòng tiền của KH ({active_app['applicant']})."
+        )
+    return (
+        f"Từ chối cấp tín dụng {credit_disp} do điểm rủi ro"
+        f" {pd_num:.3f} >= {decline_threshold:.2f}."
+    )
+
+
+def persist_decision(
+    applications: dict,
+    audit_logs: list,
+    selected_id: str,
+    chosen_decision: str,
+    chosen_reason: str,
+    note_val: str,
+    is_live_db: bool,
+    save_fn=None,
+    fetch_fn=None,
+    now_str: str | None = None,
+) -> tuple[bool, str, str]:
+    """Lưu quyết định thẩm định trung thực: chặn Approve khi ML lỗi và không báo thành công giả khi DB lỗi."""
+    save_fn = save_fn or save_audit_decision_to_db
+    fetch_fn = fetch_fn or fetch_audit_history_from_db
+    active_app = applications[selected_id]
+    if (active_app.get("ml_error") or active_app.get("pd") is None) and "Phê duyệt" in chosen_decision:
+        return (
+            False,
+            "error",
+            "Không thể Phê duyệt hồ sơ khi mô hình ML đang lỗi (Fail-Closed). Vui lòng chọn '👁 Xem xét thêm' hoặc '✕ Từ chối'.",
+        )
+
+    clean_dec = (
+        chosen_decision.replace("✓ ", "")
+        .replace("👁 ", "")
+        .replace("✕ ", "")
+        .strip()
+    )
+    timestamp = now_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_log_entry = {
+        "Mã GD": f"DEC-{len(audit_logs) + 1:03d}",
+        "Mã Hồ Sơ": f"#{selected_id}",
+        "Khách Hàng": f"#{selected_id} • {active_app['applicant']}",
+        "Quyết Định": clean_dec,
+        "Mã Lý Do": chosen_reason,
+        "Ghi Chú Nghiệp Vụ": (
+            note_val.strip()
+            if note_val and note_val.strip()
+            else "Ghi nhận quyết định theo quy trình thẩm định chuẩn."
+        ),
+        "Cán Bộ Thẩm Định": "Officer",
+        "Thời Gian Ghi Nhận": timestamp,
+    }
+
+    sig_params = inspect.signature(save_fn).parameters
+    if "app_record" in sig_params:
+        save_ok = bool(save_fn(new_log_entry, app_record=active_app))
+    else:
+        save_ok = bool(save_fn(new_log_entry))
+    if save_ok:
+        active_app["status"] = "Đã xử lý"
+        active_app["default_decision"] = chosen_decision
+        refreshed_logs = fetch_fn()
+        if refreshed_logs is not None:
+            audit_logs[:] = refreshed_logs
+        else:
+            audit_logs.insert(0, new_log_entry)
+        return (
+            True,
+            "success",
+            f"Đã lưu quyết định cho hồ sơ #{selected_id} vào bảng app.credit_decisions!",
+        )
+
+    if is_live_db:
+        db_err = get_last_db_error()
+        err_suffix = f" ({db_err})" if db_err else ""
+        vendor_label = get_db_vendor_label()
+        return (
+            False,
+            "error",
+            f"Ghi vào Kho dữ liệu ({vendor_label}) thất bại cho hồ sơ #{selected_id}{err_suffix}! "
+            "Trạng thái hồ sơ và nhật ký kiểm toán chưa được cập nhật.",
+        )
+
+    active_app["status"] = "Đã xử lý"
+    active_app["default_decision"] = chosen_decision
+    new_log_entry["Mã GD"] = f"LOCAL-{len(audit_logs) + 901}"
+    new_log_entry["Cán Bộ Thẩm Định"] = "Officer (Offline)"
+    audit_logs.insert(0, new_log_entry)
+    return (
+        True,
+        "warning",
+        f"Chế độ Offline: Đã lưu tạm quyết định hồ sơ #{selected_id} trong phiên làm việc (chưa ghi vào DB).",
+    )
+
+
 def render_kpi_ribbon():
-    """Hiển thị 4 chỉ số KPI quan trọng ở đầu Tab Thẩm định (kết nối trực tiếp DWH Supabase)."""
+    """Hiển thị 4 chỉ số KPI quan trọng ở đầu Tab Thẩm định (kết nối trực tiếp DWH Cloud/Local)."""
     dwh = fetch_dwh_kpi_summary()
     apps = st.session_state.applications
     done_count = len([x for x in st.session_state.get("audit_logs", []) if x.get("Quyết Định") in ("Phê duyệt", "Từ chối", "Xem xét thêm")])
@@ -30,12 +283,17 @@ def render_kpi_ribbon():
         labeled_count_disp = f"{dwh['labeled_applications']:,}"
         target_1_disp = f"{dwh['bad_loans_count']:,}"
         bad_rate = dwh["bad_rate"]
-        source_badge = "🟢 Live DWH Supabase (PostgreSQL 17)"
+        vendor_label = get_db_vendor_label()
+        source_badge = f"🟢 Live DWH {vendor_label} (PostgreSQL)"
         cohort_subtitle = "hồ sơ trong Kho dữ liệu"
     else:
         total_apps = len(apps)
         total_apps_disp = str(total_apps)
-        total_credit_disp = f"{sum(a['credit'] for a in apps.values()):,.1f}M"
+        total_credit_m = sum(
+            (a.get("credit") or 0.0) * a.get("unit_scale", 1000.0) / 1e6
+            for a in apps.values()
+        )
+        total_credit_disp = f"{total_credit_m:,.2f}M"
         labeled_apps = [a for a in apps.values() if a.get("target") is not None]
         labeled_count = len(labeled_apps)
         target_1_count = sum(1 for a in labeled_apps if a.get("target") == 1)
@@ -192,13 +450,13 @@ def render_tab_core():
             with f_col1:
                 filter_status = st.selectbox(
                     "Trạng thái",
-                    ["Tất cả trạng thái", "Chờ duyệt", "Đã duyệt"],
+                    ["Tất cả trạng thái", "Chờ duyệt", "Đã xử lý"],
                     label_visibility="collapsed",
                 )
             with f_col2:
                 filter_risk = st.selectbox(
                     "Mức rủi ro",
-                    ["Tất cả rủi ro", "HIGH", "MEDIUM", "LOW"],
+                    ["Tất cả rủi ro", "HIGH", "MEDIUM", "LOW", "ERROR"],
                     label_visibility="collapsed",
                 )
 
@@ -212,10 +470,14 @@ def render_tab_core():
                     searched_id = cand_id
                     int_id = int(cand_id)
                     if cand_id not in st.session_state.applications:
-                        with st.spinner(f"Đang tìm hồ sơ #{cand_id} từ Supabase DWH..."):
+                        with st.spinner(f"Đang tìm hồ sơ #{cand_id} từ Kho DWH..."):
                             fetched_app = fetch_application_by_id(int_id)
                         if fetched_app:
                             st.session_state.applications[cand_id] = fetched_app
+                            sync_app_status_from_logs(
+                                st.session_state.applications,
+                                st.session_state.get("audit_logs", []),
+                            )
 
             filtered_ids = []
             for aid, app in st.session_state.applications.items():
@@ -234,24 +496,26 @@ def render_tab_core():
             if searched_id and searched_id in st.session_state.applications:
                 if searched_id not in filtered_ids:
                     filtered_ids.insert(0, searched_id)
+                found_src = (
+                    f"trực tiếp từ Kho DWH ({get_db_vendor_label()})"
+                    if st.session_state.applications[searched_id].get("is_real_dwh")
+                    else "trong danh sách phiên làm việc"
+                )
                 st.markdown(
                     f'<div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:6px; padding:4px 8px; margin:2px 0 4px 0; font-size:0.74rem; color:#065F46;">'
-                    f"✓ Tìm thấy hồ sơ <b>#{searched_id}</b> trực tiếp từ Supabase DWH</div>",
+                    f"✓ Tìm thấy hồ sơ <b>#{searched_id}</b> {found_src}</div>",
                     unsafe_allow_html=True,
                 )
+            elif searched_id:
+                st.warning(f"Không tìm thấy hồ sơ #{searched_id} trong Kho DWH hoặc danh sách hiện tại.")
 
             if not filtered_ids:
                 st.info(f"Không có hồ sơ nào khớp bộ lọc hiện tại. Đang hiển thị toàn bộ danh sách.")
                 filtered_ids = list(st.session_state.applications.keys())
 
             queue_labels = {
-                aid: (
-                    f"{'🟢' if a['risk_level'] == 'LOW' else ('🟡' if a['risk_level'] == 'MEDIUM' else '🔴')} "
-                    f"**#{aid} • {a['applicant']}** &nbsp; `PD: {a['pd']:.3f}`\n\n"
-                    f"{a['product']} • {a['credit']:,.1f}{a.get('unit_suffix', 'M')} — "
-                    f"{'✓ Đã xử lý' if a['status'] == 'Đã duyệt' else 'Chờ duyệt'}"
-                )
-                for aid, a in ((fid, st.session_state.applications[fid]) for fid in filtered_ids)
+                aid: _format_queue_label(aid, st.session_state.applications[aid])
+                for aid in filtered_ids
             }
 
             def format_queue_option(aid):
@@ -275,7 +539,7 @@ def render_tab_core():
                     key="queue_radio",
                 )
 
-            # Nút nạp thêm hồ sơ từ Supabase DWH (phân trang trực tiếp)
+            # Nút nạp thêm hồ sơ từ Cloud DWH (phân trang trực tiếp)
             col_btn, col_info = st.columns([1.2, 0.8])
             with col_btn:
                 is_live = st.session_state.get("is_live_db", False)
@@ -283,13 +547,17 @@ def render_tab_core():
                     "➕ Nạp thêm 20 hồ sơ",
                     use_container_width=True,
                     disabled=not is_live,
-                    help="Tải thêm 20 hồ sơ tiếp theo từ Kho Supabase DWH (307,511 hồ sơ)",
+                    help=f"Tải thêm 20 hồ sơ tiếp theo từ Kho DWH ({get_db_vendor_label()} - 307,511 hồ sơ)",
                 ):
-                    with st.spinner("Đang nạp từ Supabase..."):
+                    with st.spinner(f"Đang nạp từ Kho DWH ({get_db_vendor_label()})..."):
                         cur_real_cnt = sum(1 for a in st.session_state.applications.values() if a.get("is_real_dwh"))
                         more_batch = fetch_live_applications_batch(limit=20, offset=cur_real_cnt)
                         if more_batch:
                             st.session_state.applications.update(more_batch)
+                            sync_app_status_from_logs(
+                                st.session_state.applications,
+                                st.session_state.get("audit_logs", []),
+                            )
                             st.toast(f"✅ Đã nạp thành công {len(more_batch)} hồ sơ mới!", icon="📥")
                             st.rerun()
             with col_info:
@@ -310,7 +578,7 @@ def render_tab_core():
                 st.session_state.draft_note = ""
                 st.session_state.draft_note_area = ""
                 st.session_state.decision_radio = st.session_state.applications[selected_id].get(
-                    "default_decision", "✓ Phê duyệt"
+                    "default_decision", "👁 Xem xét thêm"
                 )
 
         active_app = st.session_state.applications[selected_id]
@@ -336,9 +604,14 @@ def render_tab_core():
                 "👁 Xem xét thêm",
                 "✕ Từ chối",
             ]
-            cur_default = active_app.get("default_decision", "✓ Phê duyệt")
+            cur_default = active_app.get("default_decision", "👁 Xem xét thêm")
             if "decision_radio" not in st.session_state:
                 st.session_state.decision_radio = cur_default
+
+            if active_app.get("ml_error") or active_app.get("pd") is None:
+                st.warning(
+                    "⚠️ Đang lỗi chấm điểm ML (Fail-Closed): Không cho phép lưu quyết định 'Phê duyệt'."
+                )
 
             chosen_decision = st.radio(
                 "Lệnh quyết định tín dụng:",
@@ -379,23 +652,12 @@ def render_tab_core():
             u_sfx = active_app.get("unit_suffix", "M")
             with col_autofill:
                 if st.button("✨ Điền mẫu nhanh", use_container_width=True):
-                    if "Phê duyệt" in chosen_decision:
-                        auto_txt = (
-                            f"Đồng ý cấp tín dụng {active_app['credit']:,.1f}{u_sfx} cho"
-                            f" KH #{active_app['id']} ({active_app['applicant']}). Điểm rủi ro"
-                            f" {active_app['pd']:.3f} < {REVIEW_THRESHOLD:.2f}."
-                        )
-                    elif "Xem xét" in chosen_decision:
-                        auto_txt = (
-                            f"Hồ sơ #{active_app['id']} có điểm rủi ro {active_app['pd']:.3f} nằm"
-                            f" trong vùng [{REVIEW_THRESHOLD:.2f}, {DECLINE_THRESHOLD:.2f})."
-                            f" Cần xác minh thêm dòng tiền của KH ({active_app['applicant']})."
-                        )
-                    else:
-                        auto_txt = (
-                            f"Từ chối cấp tín dụng {active_app['credit']:,.1f}{u_sfx} do điểm rủi ro"
-                            f" {active_app['pd']:.3f} >= {DECLINE_THRESHOLD:.2f}."
-                        )
+                    auto_txt = _build_autofill_note(
+                        active_app,
+                        chosen_decision,
+                        REVIEW_THRESHOLD,
+                        DECLINE_THRESHOLD,
+                    )
                     st.session_state.draft_note = auto_txt
                     st.session_state.draft_note_area = auto_txt
 
@@ -431,70 +693,31 @@ def render_tab_core():
                     type="primary",
                     use_container_width=True,
                 ):
-                    st.session_state.applications[selected_id]["status"] = "Đã duyệt"
-                    st.session_state.applications[selected_id]["default_decision"] = chosen_decision
-                    new_log_entry = {
-                        "Mã GD": f"DEC-{len(st.session_state.audit_logs) + 1:03d}",
-                        "Mã Hồ Sơ": f"#{selected_id}",
-                        "Khách Hàng": f"#{selected_id} • {active_app['applicant']}",
-                        "Quyết Định": chosen_decision.replace("✓ ", "").replace("👁 ", "").replace("✕ ", ""),
-                        "Mã Lý Do": chosen_reason,
-                        "Ghi Chú Nghiệp Vụ": (
-                            note_val.strip()
-                            if note_val.strip()
-                            else "Ghi nhận quyết định theo quy trình thẩm định chuẩn."
-                        ),
-                        "Cán Bộ Thẩm Định": "Officer",
-                        "Thời Gian Ghi Nhận": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    }
-                    save_ok = save_audit_decision_to_db(new_log_entry)
-                    if save_ok:
-                        refreshed_logs = fetch_audit_history_from_db()
-                        if refreshed_logs is not None:
-                            st.session_state.audit_logs = refreshed_logs
-                        else:
-                            st.session_state.audit_logs.insert(0, new_log_entry)
-                    else:
-                        st.session_state.audit_logs.insert(0, new_log_entry)
-                    st.session_state.pending_clear_note = True
-                    st.toast(
-                        f"Đã lưu quyết định cho hồ sơ #{selected_id} vào bảng app.credit_decisions!",
-                        icon="✅",
+                    save_ok, save_level, save_msg = persist_decision(
+                        applications=st.session_state.applications,
+                        audit_logs=st.session_state.audit_logs,
+                        selected_id=selected_id,
+                        chosen_decision=chosen_decision,
+                        chosen_reason=chosen_reason,
+                        note_val=note_val,
+                        is_live_db=bool(st.session_state.get("is_live_db")),
                     )
-                    st.rerun()
+                    if save_ok:
+                        st.session_state.pending_clear_note = True
+                        st.toast(
+                            save_msg,
+                            icon="✅" if save_level == "success" else "⚠️",
+                        )
+                        st.rerun()
+                    else:
+                        st.error(save_msg)
 
     # ================= CỘT PHẢI: HỒ SƠ 360 ĐỘ CHI TIẾT =================
     with col_right:
-        # 1. Banner Khuyến nghị Hệ thống — ĐỦ 3 CẤP ĐỘ RỦI RO (LOW / MEDIUM / HIGH)
-        r_level = active_app["risk_level"]
-        if r_level == "LOW":
-            banner_bg = "#ECFDF5"
-            banner_border = "#10B981"
-            badge_bg = "#059669"
-            rec_title = "Khuyến nghị Hệ thống: Phê Duyệt Hồ Sơ (APPROVE_SIMULATION)"
-            rec_sub = (
-                f"Điểm rủi ro mô hình nằm trong vùng an toàn"
-                f" (risk_score = {active_app['pd']:.3f} < {REVIEW_THRESHOLD:.2f})."
-            )
-        elif r_level == "MEDIUM":
-            banner_bg = "#FFFBEB"
-            banner_border = "#F59E0B"
-            badge_bg = "#D97706"
-            rec_title = "Khuyến nghị Hệ thống: Thẩm Định Bổ Sung (REVIEW)"
-            rec_sub = (
-                f"Điểm rủi ro nằm trong vùng cần xem xét kỹ"
-                f" ({REVIEW_THRESHOLD:.2f} ≤ risk_score = {active_app['pd']:.3f} < {DECLINE_THRESHOLD:.2f})."
-                " Khuyến nghị kiểm tra chứng từ thu nhập hoặc chạy What-If."
-            )
-        else:
-            banner_bg = "#FFF1F2"
-            banner_border = "#F43F5E"
-            badge_bg = "#E11D48"
-            rec_title = "Khuyến nghị Hệ thống: Từ Chối Mô Phỏng (DECLINE_SIMULATION)"
-            rec_sub = (
-                f"Điểm rủi ro mô hình vượt ngưỡng từ chối"
-                f" (risk_score = {active_app['pd']:.3f} ≥ {DECLINE_THRESHOLD:.2f})."
-            )
+        # 1. Banner Khuyến nghị Hệ thống — BÁM SÁT POLICY (recommendation_code & alerts) + FAIL-CLOSED
+        banner = _resolve_recommendation_banner(
+            active_app, REVIEW_THRESHOLD, DECLINE_THRESHOLD
+        )
 
         t_val = active_app.get("target")
         if t_val == 1:
@@ -504,13 +727,25 @@ def render_tab_core():
         else:
             gt_pill = '<span style="background:#F1F5F9; color:#475569; font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:6px;">Chưa có nhãn (Test)</span>'
 
+        alerts_html = ""
+        if banner["alerts_text"]:
+            items_html = "".join(
+                f"<li>{html.escape(item)}</li>" for item in banner["alerts_text"]
+            )
+            alerts_html = (
+                '<div style="margin-top:8px; padding:6px 10px; background:rgba(255,255,255,0.75); '
+                'border-radius:8px; border:1px dashed rgba(15,23,42,0.18); font-size:0.74rem; color:#1E293B;">'
+                '<b>Cảnh báo chính sách & dữ liệu:</b>'
+                f'<ul style="margin:4px 0 0 18px; padding:0;">{items_html}</ul></div>'
+            )
+
         st.markdown(
             f"""
-<div style="background:{banner_bg}; border:1px solid {banner_border}; border-left:5px solid {banner_border}; border-radius:12px; padding:14px 18px; margin-bottom: 10px;">
+<div style="background:{banner['bg']}; border:1px solid {banner['border']}; border-left:5px solid {banner['border']}; border-radius:12px; padding:14px 18px; margin-bottom: 10px;">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="background:{badge_bg}; color:#FFFFFF; font-size:0.68rem; font-weight:700; padding:3px 10px; border-radius:999px; letter-spacing:0.04em;">
-                MỨC RỦI RO: {r_level}
+            <span style="background:{banner['badge_bg']}; color:#FFFFFF; font-size:0.68rem; font-weight:700; padding:3px 10px; border-radius:999px; letter-spacing:0.04em;">
+                {banner['badge_text']}
             </span>
             <span class="mono" style="font-size:0.76rem; font-weight:700; color:#1E293B;">
                 KH: {active_app['applicant'].upper()} • #{active_app['id']}
@@ -522,11 +757,12 @@ def render_tab_core():
         </div>
     </div>
     <div style="font-size:1.05rem; font-weight:700; color:#0F172A; margin-top:8px;">
-        {rec_title}
+        {banner['title']}
     </div>
     <div style="font-size:0.78rem; font-weight:500; color:#334155; margin-top:2px;">
-        {rec_sub}
+        {banner['subtitle']}
     </div>
+    {alerts_html}
 </div>
 """,
             unsafe_allow_html=True,
@@ -536,25 +772,34 @@ def render_tab_core():
         with st.container(border=True):
             g_col, d_col = st.columns([4.8, 7.2], gap="medium")
             with g_col:
-                st.plotly_chart(
-                    create_gauge_chart(
-                        active_app["pd"], active_app["risk_level"]
-                    ),
-                    use_container_width=True,
-                    config={"displayModeBar": False},
-                )
+                if active_app.get("ml_error") or active_app.get("pd") is None:
+                    st.error(
+                        "⚠️ Không thể vẽ Gauge PD do mô hình ML lỗi/chưa tải được (ML_ERROR)."
+                    )
+                else:
+                    st.plotly_chart(
+                        create_gauge_chart(
+                            float(active_app["pd"]), active_app["risk_level"]
+                        ),
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                    )
             with d_col:
                 st.markdown(
                     '<div class="section-title" style="margin-top:4px;">🧠 YẾU'
                     " TỐ ĐÓNG GÓP LOG-ODDS CHÍNH (MODEL FACTORS):</div>",
                     unsafe_allow_html=True,
                 )
-                drivers_html = ""
-                for feat, desc, val, dtype in active_app["drivers"]:
-                    bg_c = "#ECFDF5" if dtype == "pos" else "#FFF1F2"
-                    bd_c = "#A7F3D0" if dtype == "pos" else "#FECDD3"
-                    tx_c = "#065F46" if dtype == "pos" else "#9F1239"
-                    drivers_html += f"""
+                drivers_list = active_app.get("drivers") or []
+                if not drivers_list:
+                    st.info("Không có phân tích log-odds (mô hình ML chưa chấm được hoặc lỗi suy luận).")
+                else:
+                    drivers_html = ""
+                    for feat, desc, val, dtype in drivers_list:
+                        bg_c = "#ECFDF5" if dtype == "pos" else "#FFF1F2"
+                        bd_c = "#A7F3D0" if dtype == "pos" else "#FECDD3"
+                        tx_c = "#065F46" if dtype == "pos" else "#9F1239"
+                        drivers_html += f"""
 <div style="background:{bg_c}; border:1px solid {bd_c}; border-radius:8px; padding:9px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
     <div>
         <span class="mono" style="font-size:0.78rem; font-weight:700; color:{tx_c};">{feat}</span>
@@ -563,28 +808,38 @@ def render_tab_core():
     <span class="mono" style="font-size:0.8rem; font-weight:700; color:{tx_c};">{val}</span>
 </div>
 """
-                st.markdown(drivers_html, unsafe_allow_html=True)
+                    st.markdown(drivers_html, unsafe_allow_html=True)
 
-        # 3. Tình hình Tài chính & Tỷ số Tín dụng / Thu nhập
+        # 3. Tình hình Tài chính & Tỷ số Tín dụng / Thu nhập ("Thiếu khác 0")
         with st.container(border=True):
-            inc_val = active_app["income"]
-            leverage = (active_app["credit"] / inc_val) if inc_val > 0 else 0.0
-            lev_pct = min((leverage / 4.0) * 100, 100)
-            lev_color = (
-                "#10B981"
-                if leverage <= 1.8
-                else ("#F59E0B" if leverage <= 2.5 else "#E11D48")
-            )
-            lev_status = (
-                "An toàn (≤ 1.8x)"
-                if leverage <= 1.8
-                else (
-                    "Cảnh báo (1.8x - 2.5x)"
-                    if leverage <= 2.5
-                    else "Vượt ngưỡng cao (> 2.5x)"
+            inc_val = active_app.get("income")
+            cred_val = active_app.get("credit")
+            ann_val = active_app.get("annuity")
+            goods_val = active_app.get("goods")
+            u_sfx = active_app.get("unit_suffix", "K")
+
+            if inc_val is not None and inc_val > 0 and cred_val is not None:
+                leverage = cred_val / inc_val
+                lev_pct = min((leverage / 4.0) * 100, 100)
+                lev_color = (
+                    "#10B981"
+                    if leverage <= 1.8
+                    else ("#F59E0B" if leverage <= 2.5 else "#E11D48")
                 )
-            )
-            u_sfx = active_app.get("unit_suffix", "M")
+                lev_status = (
+                    "An toàn (≤ 1.8x)"
+                    if leverage <= 1.8
+                    else (
+                        "Cảnh báo (1.8x - 2.5x)"
+                        if leverage <= 2.5
+                        else "Vượt ngưỡng cao (> 2.5x)"
+                    )
+                )
+                lev_disp = f"{leverage:.2f}x ({lev_status})"
+            else:
+                lev_pct = 0.0
+                lev_color = "#64748B"
+                lev_disp = "N/A (Thiếu thu nhập hoặc tín dụng)"
 
             st.markdown(
                 f"""
@@ -597,25 +852,25 @@ def render_tab_core():
 <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:12px;">
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Thu nhập khai báo</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['income']:,.1f}{u_sfx}</div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{_fmt_money(inc_val, u_sfx)}</div>
     </div>
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Giá trị tín dụng (Credit)</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#1D4ED8; margin-top:2px; white-space:nowrap;">{active_app['credit']:,.1f}{u_sfx}</div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#1D4ED8; margin-top:2px; white-space:nowrap;">{_fmt_money(cred_val, u_sfx)}</div>
     </div>
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Khoản trả định kỳ (Annuity)</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['annuity']:,.1f}{u_sfx} <span style="font-size:0.72rem; font-weight:600; color:#64748B;">/ kỳ</span></div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{_fmt_money(ann_val, u_sfx)} <span style="font-size:0.72rem; font-weight:600; color:#64748B;">/ kỳ</span></div>
     </div>
     <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 10px;">
         <div style="font-size:0.72rem; color:#64748B;">Giá trị hàng hóa (Goods)</div>
-        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{active_app['goods']:,.1f}{u_sfx}</div>
+        <div class="mono" style="font-size:1.15rem; font-weight:700; color:#0F172A; margin-top:2px; white-space:nowrap;">{_fmt_money(goods_val, u_sfx)}</div>
     </div>
 </div>
 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 14px;">
     <div style="display:flex; justify-content:space-between; font-size:0.76rem; font-weight:600; margin-bottom:6px;">
         <span style="color:#334155;">Hệ số Tín dụng / Thu nhập (credit_income_ratio):</span>
-        <span class="mono" style="color:{lev_color}; font-weight:700;">{leverage:.2f}x ({lev_status})</span>
+        <span class="mono" style="color:{lev_color}; font-weight:700;">{lev_disp}</span>
     </div>
     <div style="width:100%; height:8px; background:#E2E8F0; border-radius:999px; overflow:hidden;">
         <div style="width:{lev_pct}%; height:100%; background:{lev_color}; border-radius:999px;"></div>

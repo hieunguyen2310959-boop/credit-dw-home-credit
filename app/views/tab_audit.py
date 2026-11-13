@@ -6,37 +6,38 @@ và giám sát tiến trình trích xuất nạp dữ liệu ETL (ops.etl_runs).
 
 import pandas as pd
 import streamlit as st
-from app.data_adapter import fetch_audit_history_from_db, fetch_etl_runs
+from app.data_adapter import fetch_audit_history_from_db, fetch_etl_runs, get_db_vendor_label
 
 
 def render_tab_audit():
-    """Render giao diện chính của Tab 4 (Audit Trail & ETL Monitoring kết nối DWH Supabase)."""
+    """Render giao diện chính của Tab 4 (Audit Trail & ETL Monitoring kết nối DWH)."""
     with st.container(border=True):
         hdr_col, sync_col = st.columns([9.4, 2.6], gap="small")
         with hdr_col:
             st.markdown(
                 '<div class="section-title">📜 NHẬT KÝ RA QUYẾT ĐỊNH CỦA CÁN BỘ'
-                " (AUDIT TRAIL - APP.CREDIT_DECISIONS TRÊN SUPABASE)</div>",
+                " (AUDIT TRAIL - BẢNG APP.CREDIT_DECISIONS)</div>",
                 unsafe_allow_html=True,
             )
         with sync_col:
-            if st.button("🔄 Đồng bộ từ Supabase", key="btn_sync_audit_db", use_container_width=True):
+            if st.button("🔄 Đồng bộ từ Cloud DWH", key="btn_sync_audit_db", use_container_width=True):
                 fresh_logs = fetch_audit_history_from_db()
                 if fresh_logs is not None:
                     st.session_state.audit_logs = fresh_logs
                     decided_ids = {str(log.get("Mã Hồ Sơ", "")).lstrip("#") for log in fresh_logs}
                     for app_id, app_obj in st.session_state.applications.items():
                         if str(app_id) in decided_ids:
-                            app_obj["status"] = "Đã duyệt"
+                            app_obj["status"] = "Đã xử lý"
                     st.session_state["audit_sync_feedback"] = (
                         "ok",
                         f"Đã đồng bộ {len(fresh_logs)} bản ghi quyết định mới nhất từ bảng app.credit_decisions.",
                     )
                     st.rerun()
                 else:
+                    vendor_label = get_db_vendor_label()
                     st.session_state["audit_sync_feedback"] = (
                         "err",
-                        "Không thể kết nối Supabase để đồng bộ Nhật ký kiểm toán.",
+                        f"Không thể kết nối {vendor_label} để đồng bộ Nhật ký kiểm toán.",
                     )
 
         sync_fb = st.session_state.pop("audit_sync_feedback", None)
@@ -59,7 +60,7 @@ def render_tab_audit():
     with st.container(border=True):
         st.markdown(
             '<div class="section-title">⚙️ GIÁM SÁT TIẾN TRÌNH ETL KHO DỮ LIỆU'
-            " (OPS.ETL_RUNS - ĐỒNG BỘ TRỰC TIẾP TỪ SUPABASE)</div>",
+            " (OPS.ETL_RUNS - ĐỒNG BỘ TRỰC TIẾP TỪ KHO DỮ LIỆU CLOUD)</div>",
             unsafe_allow_html=True,
         )
         real_runs = fetch_etl_runs()
@@ -73,19 +74,22 @@ def render_tab_audit():
                 row_counts = r[4] or {}
                 manifest = r[5] or {}
 
-                # Format row counts
-                in_app = row_counts.get("application_train", {}).get("input", 307511)
-                in_prev = row_counts.get("previous", {}).get("input", 1670214)
-                out_dw = row_counts.get("dw", {}).get("output", 307511)
+                # Format row counts trung thực (không điền số giả khi thiếu key)
+                in_app = row_counts.get("application_train", {}).get("input")
+                in_prev = row_counts.get("previous", {}).get("input")
+                out_dw = row_counts.get("dw", {}).get("output")
+                in_app_disp = f"{in_app:,}" if isinstance(in_app, int) else "N/A"
+                in_prev_disp = f"{in_prev:,}" if isinstance(in_prev, int) else "N/A"
+                out_dw_disp = f"{out_dw:,}" if isinstance(out_dw, int) else "N/A"
 
                 badge_color = "#059669" if status == "succeeded" else "#DC2626"
                 badge_bg = "#ECFDF5" if status == "succeeded" else "#FEF2F2"
                 badge_border = "#A7F3D0" if status == "succeeded" else "#FECACA"
 
-                # Hashes
+                # Hashes trung thực từ source_manifest
                 files = manifest.get("files", [])
-                h_app = files[0].get("sha256", "")[:12] if len(files) > 0 else "52e96b89...1112"
-                h_prev = files[1].get("sha256", "")[:12] if len(files) > 1 else "5046cd65...7ee0"
+                h_app = str(files[0].get("sha256", ""))[:12] if len(files) > 0 and files[0].get("sha256") else "N/A"
+                h_prev = str(files[1].get("sha256", ""))[:12] if len(files) > 1 and files[1].get("sha256") else "N/A"
 
                 rows_html += (
                     f'<tr style="border-bottom:1px solid #F1F5F9;">'
@@ -97,9 +101,9 @@ def render_tab_audit():
                     f'padding:2px 8px; border-radius:999px; font-weight:600; font-size:0.7rem;">'
                     f'● {status.capitalize()}</span></td>'
                     f'<td style="padding:10px 12px;">'
-                    f'<span class="mono" style="background:#F1F5F9; padding:2px 8px; border-radius:6px; margin-right:4px;">app: <b>{in_app:,}</b></span>'
-                    f'<span class="mono" style="background:#F1F5F9; padding:2px 8px; border-radius:6px; margin-right:4px;">prev: <b>{in_prev:,}</b></span>'
-                    f'<span class="mono" style="background:#EFF6FF; color:#1D4ED8; padding:2px 8px; border-radius:6px;">dw: <b>{out_dw:,}</b></span>'
+                    f'<span class="mono" style="background:#F1F5F9; padding:2px 8px; border-radius:6px; margin-right:4px;">app: <b>{in_app_disp}</b></span>'
+                    f'<span class="mono" style="background:#F1F5F9; padding:2px 8px; border-radius:6px; margin-right:4px;">prev: <b>{in_prev_disp}</b></span>'
+                    f'<span class="mono" style="background:#EFF6FF; color:#1D4ED8; padding:2px 8px; border-radius:6px;">dw: <b>{out_dw_disp}</b></span>'
                     f'</td>'
                     f'<td class="mono" style="padding:10px 12px; color:#475569;">'
                     f'<code style="background:#F8FAFC; border:1px solid #E2E8F0; padding:2px 6px; border-radius:4px;">app_train: {h_app}...</code><br>'
@@ -125,7 +129,8 @@ def render_tab_audit():
             latest_counts = real_runs[0][4] or {}
             cleaning = latest_counts.get("cleaning", {})
             prev_stats = latest_counts.get("previous", {})
-            dw_out = latest_counts.get("dw", {}).get("output", 307511)
+            dw_out = latest_counts.get("dw", {}).get("output")
+            dw_out_disp = f"{dw_out:,}" if isinstance(dw_out, int) else "N/A"
             inv_emp = cleaning.get("invalid_employment", 0)
             neg_cred = cleaning.get("negative_credit", 0)
             neg_inc = cleaning.get("negative_income", 0)
@@ -134,6 +139,10 @@ def render_tab_audit():
             prev_orphan = prev_stats.get("orphan", 0)
             prev_future = prev_stats.get("future", 0)
             prev_unknown_cut = prev_stats.get("unknown_cutoff", 0)
+            leak_color = "#059669" if (prev_future == 0 and prev_unknown_cut == 0) else "#DC2626"
+            leak_status = "An toàn" if (prev_future == 0 and prev_unknown_cut == 0) else "Cảnh báo cutoff/future"
+            invalid_sum = neg_cred + neg_inc + inv_age + inv_ext
+            invalid_color = "#059669" if invalid_sum == 0 else "#D97706"
 
             st.markdown(
                 f"""
@@ -150,57 +159,27 @@ def render_tab_audit():
         <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:9px 10px;">
             <div style="color:#64748B; font-size:0.7rem;">Lọc đơn mồ côi (Previous)</div>
             <div class="mono" style="font-size:1.0rem; font-weight:700; color:#1D4ED8;">{prev_orphan:,}</div>
-            <div style="color:#64748B; font-size:0.68rem;">Không khớp tập train → loại trước aggregate</div>
+            <div style="color:#64748B; font-size:0.68rem;">Không khớp cohort → loại trước aggregate</div>
         </div>
         <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:9px 10px;">
             <div style="color:#64748B; font-size:0.7rem;">Rò rỉ tương lai / Sai mốc</div>
-            <div class="mono" style="font-size:1.0rem; font-weight:700; color:#059669;">{prev_future:,} / {prev_unknown_cut:,}</div>
-            <div style="color:#64748B; font-size:0.68rem;">future=0 &bull; unknown_cutoff=0 (An toàn)</div>
+            <div class="mono" style="font-size:1.0rem; font-weight:700; color:{leak_color};">{prev_future:,} / {prev_unknown_cut:,}</div>
+            <div style="color:#64748B; font-size:0.68rem;">future={prev_future:,} &bull; unknown_cutoff={prev_unknown_cut:,} ({leak_status})</div>
         </div>
         <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:9px 10px;">
             <div style="color:#64748B; font-size:0.7rem;">Âm tiền / Tuổi / EXT lỗi</div>
-            <div class="mono" style="font-size:1.0rem; font-weight:700; color:#059669;">{neg_cred + neg_inc + inv_age + inv_ext:,}</div>
-            <div style="color:#64748B; font-size:0.68rem;">Bảo toàn grain {dw_out:,} hồ sơ DWH</div>
+            <div class="mono" style="font-size:1.0rem; font-weight:700; color:{invalid_color};">{invalid_sum:,}</div>
+            <div style="color:#64748B; font-size:0.68rem;">Bảo toàn grain {dw_out_disp} hồ sơ DWH</div>
         </div>
     </div>
 </div>
 """,
                 unsafe_allow_html=True,
             )
-        else:
-            st.markdown(
-                f"""
-<table style="width:100%; border-collapse:collapse; font-size:0.78rem; text-align:left;">
-    <thead>
-        <tr style="background:#F8FAFC; border-bottom:1px solid #E2E8F0; color:#475569;">
-            <th style="padding:10px 12px;">Mã Đợt ETL</th>
-            <th style="padding:10px 12px;">Bắt Đầu / Hoàn Thành</th>
-            <th style="padding:10px 12px;">Trạng Thái</th>
-            <th style="padding:10px 12px;">Thống Kê Dòng Dữ Liệu (Row Counts)</th>
-            <th style="padding:10px 12px;">Chứng Thực Toàn Vẹn (Manifest SHA-256)</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr style="border-bottom:1px solid #F1F5F9;">
-            <td class="mono" style="padding:10px 12px; font-weight:700;">#ETL-01</td>
-            <td class="mono" style="padding:10px 12px; color:#475569;">2026-11-10 18:06:38 <span style="color:#94A3B8;">(2m 36s)</span></td>
-            <td style="padding:10px 12px;">
-                <span style="background:#ECFDF5; color:#059669; border:1px solid #A7F3D0; padding:2px 8px; border-radius:999px; font-weight:600; font-size:0.7rem;">
-                    ● Succeeded
-                </span>
-            </td>
-            <td style="padding:10px 12px;">
-                <span class="mono" style="background:#F1F5F9; padding:2px 8px; border-radius:6px; margin-right:4px;">raw_apps: <b>307,511</b></span>
-                <span class="mono" style="background:#EFF6FF; color:#1D4ED8; padding:2px 8px; border-radius:6px; margin-right:4px;">dw_mart: <b>307,511</b></span>
-                <span class="mono" style="background:#ECFDF5; color:#059669; padding:2px 8px; border-radius:6px;">clean_rate: <b>100%</b></span>
-            </td>
-            <td class="mono" style="padding:10px 12px; color:#475569;">
-                <code style="background:#F8FAFC; border:1px solid #E2E8F0; padding:2px 6px; border-radius:4px;">app_train: SHA-256 OK</code>
-                <code style="background:#F8FAFC; border:1px solid #E2E8F0; padding:2px 6px; border-radius:4px; margin-left:4px;">prev_app: SHA-256 OK</code>
-            </td>
-        </tr>
-    </tbody>
-</table>
-""",
-                unsafe_allow_html=True,
+        elif real_runs is None:
+            st.warning(
+                "⚠️ Chế độ Offline / Mất kết nối DB: Không thể đọc lịch sử chạy ETL từ bảng `ops.etl_runs` "
+                "(đã tắt bảng mẫu cứng để tránh hiển thị số liệu giả)."
             )
+        else:
+            st.info("Chưa có lượt chạy ETL nào được ghi nhận trong bảng `ops.etl_runs`.")

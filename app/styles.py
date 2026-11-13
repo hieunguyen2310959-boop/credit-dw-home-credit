@@ -389,14 +389,17 @@ def inject_enterprise_css():
 
 def render_top_header():
     """Header ghim cố định ở đầu trang, chuẩn thương hiệu Home Credit."""
+    from app.data_adapter import get_db_vendor_label
+
     is_live = st.session_state.get("is_live_db", False)
     if is_live:
+        vendor_label = get_db_vendor_label()
         status_pill = (
-            '<div style="display:flex; align-items:center; gap:6px; background:#ECFDF5; '
-            'border:1px solid #A7F3D0; border-radius:999px; padding:4px 11px; '
-            'font-size:0.72rem; font-weight:600; color:#065F46;">'
-            '<span style="width:7px; height:7px; border-radius:50%; background:#10B981; display:inline-block;"></span>'
-            'Supabase Live DWH • 307,511 hồ sơ</div>'
+            f'<div style="display:flex; align-items:center; gap:6px; background:#ECFDF5; '
+            f'border:1px solid #A7F3D0; border-radius:999px; padding:4px 11px; '
+            f'font-size:0.72rem; font-weight:600; color:#065F46;">'
+            f'<span style="width:7px; height:7px; border-radius:50%; background:#10B981; display:inline-block;"></span>'
+            f'{vendor_label} Live DWH • 307,511 hồ sơ</div>'
         )
     else:
         status_pill = (

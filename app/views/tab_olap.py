@@ -7,11 +7,11 @@ Hiển thị biểu đồ cột phân bổ rủi ro và bảng ma trận phân b
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from app.data_adapter import fetch_olap_distribution, fetch_olap_cross_tab
+from app.data_adapter import fetch_olap_distribution, fetch_olap_cross_tab, get_db_vendor_label
 
 
 def render_tab_olap():
-    """Render giao diện chính của Tab 2 (OLAP Analytics & Matrix trực tiếp từ DWH Supabase)."""
+    """Render giao diện chính của Tab 2 (OLAP Analytics & Matrix trực tiếp từ DWH)."""
     apps_list = list(st.session_state.applications.values())
 
     with st.container(border=True):
@@ -44,7 +44,7 @@ def render_tab_olap():
                 """
 <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; font-size:0.75rem; color:#475569; margin-top:8px;">
     <strong>Quy ước DWH (mart.application_overview_v1):</strong><br>
-    • Truy vấn trực tiếp từ <strong>Kho dữ liệu Supabase (307,511 hồ sơ)</strong>.<br>
+    • Truy vấn trực tiếp từ <strong>Kho dữ liệu Cloud (307,511 hồ sơ)</strong>.<br>
     • Đã chuẩn hóa nhãn khuyết về <code>Unknown</code>.<br>
     • Đơn vị chuẩn SI: <code>M</code> = Triệu (10⁶), <code>B</code> = Tỷ (10⁹).<br>
     • Hiển thị rõ nhãn cho phân khúc có tỷ lệ <code>0.0%</code>.
@@ -54,7 +54,7 @@ def render_tab_olap():
             )
 
         with olap_right:
-            # Thử lấy dữ liệu thực tế từ DWH Supabase
+            # Thử lấy dữ liệu thực tế từ DWH Cloud
             olap_live = fetch_olap_distribution(dim_choice, measure_choice)
 
             if olap_live:
@@ -62,6 +62,11 @@ def render_tab_olap():
                 vals = olap_live["vals"]
                 bar_labels = olap_live["labels"]
             else:
+                vendor_label = get_db_vendor_label()
+                st.warning(
+                    f"⚠️ Không kết nối được {vendor_label} DWH — Biểu đồ OLAP đang tạm tính trên "
+                    f"{len(apps_list)} hồ sơ trong bộ nhớ (không phản ánh toàn bộ 307,511 hồ sơ)."
+                )
                 # Fallback: Tính toán từ tập hồ sơ bộ nhớ
                 if dim_choice == "Nhóm độ tuổi (Age Band)":
                     groups = [
@@ -69,6 +74,7 @@ def render_tab_olap():
                         ("Nhóm 25-39 tuổi", [a for a in apps_list if a.get("age_band") == "25-39"]),
                         ("Nhóm 40-59 tuổi", [a for a in apps_list if a.get("age_band") == "40-59"]),
                         ("Nhóm 60+ tuổi", [a for a in apps_list if a.get("age_band") == "60+"]),
+                        ("Unknown", [a for a in apps_list if a.get("age_band") == "Unknown"]),
                     ]
                     groups = [(k, v) for k, v in groups if v]
                 elif dim_choice == "Loại hợp đồng (Contract Type)":
@@ -79,9 +85,9 @@ def render_tab_olap():
                     ]
                     groups = [(k, v) for k, v in groups if v]
                 elif dim_choice == "Trình độ học vấn (Education Level)":
-                    edu_keys = sorted({str(a.get("features", {}).get("education") or "Unknown") for a in apps_list})
+                    edu_keys = sorted({str(a.get("features", {}).get("education_level") or "Unknown") for a in apps_list})
                     groups = [
-                        (ek, [a for a in apps_list if str(a.get("features", {}).get("education") or "Unknown") == ek])
+                        (ek, [a for a in apps_list if str(a.get("features", {}).get("education_level") or "Unknown") == ek])
                         for ek in edu_keys
                     ]
                 else:
@@ -100,9 +106,9 @@ def render_tab_olap():
                         rate = (sum(1 for a in labeled if a.get("target") == 1) / len(labeled) * 100.0) if labeled else 0.0
                         vals.append(rate)
                     elif "Tổng giá trị" in measure_choice:
-                        # Quy đổi về triệu (M) thống nhất với Live OLAP
+                        # Quy đổi về triệu (M) thống nhất với Live OLAP (mặc định unit_scale=1,000 khớp đơn vị K)
                         tot_m = sum(
-                            a.get("credit", 0.0) * a.get("unit_scale", 1_000_000.0) / 1_000_000.0
+                            (a.get("credit") or 0.0) * a.get("unit_scale", 1_000.0) / 1_000_000.0
                             for a in subset
                         )
                         vals.append(tot_m)
@@ -115,12 +121,12 @@ def render_tab_olap():
                     else (
                         f"{v:.1f}%"
                         if "%" in measure_choice
-                        else (f"{v:,.1f}M" if "Credit" in measure_choice else f"{int(v):,} hồ sơ")
+                        else (f"{v:,.2f}M" if "Credit" in measure_choice else f"{int(v):,} hồ sơ")
                     )
                     for v in vals
                 ]
 
-            plot_vals = [v if v > 0 else 0.5 for v in vals]
+            plot_vals = vals
             if "%" in measure_choice:
                 bar_colors = [
                     "#DC2626" if v >= 10.0
@@ -131,7 +137,7 @@ def render_tab_olap():
                 bar_colors = ["#10B981" if v == 0 else "#1D4ED8" for v in vals]
 
             source_tag = (
-                "Live DWH Supabase • 307,511 hồ sơ"
+                f"Live DWH ({get_db_vendor_label()}) • 307,511 hồ sơ"
                 if olap_live
                 else f"Chế độ Ngoại tuyến • {len(apps_list)} hồ sơ mẫu"
             )
@@ -170,7 +176,7 @@ def render_tab_olap():
     with st.container(border=True):
         st.markdown(
             '<div class="section-title">🧮 BẢNG MA TRẬN PHÂN BỔ GIÁ TRỊ TÍN DỤNG'
-            " (CROSS-TAB MATRIX - KHO DỮ LIỆU THẬT SUPABASE)</div>",
+            " (CROSS-TAB MATRIX - KHO DỮ LIỆU THẬT DWH)</div>",
             unsafe_allow_html=True,
         )
         cross_tab_df = fetch_olap_cross_tab()
@@ -195,8 +201,8 @@ def render_tab_olap():
 
             def _fmt_cell(subset, prod_name):
                 matched = [a for a in subset if a.get("short_product") == prod_name]
-                tot_m = sum(a.get("credit", 0.0) * a.get("unit_scale", 1_000_000.0) / 1_000_000.0 for a in matched)
-                return f"{tot_m:,.1f}M ({len(matched)} đơn)"
+                tot_m = sum((a.get("credit") or 0.0) * a.get("unit_scale", 1_000.0) / 1_000_000.0 for a in matched)
+                return f"{tot_m:,.2f}M ({len(matched)} đơn)"
 
             def _fmt_bad_rate(subset):
                 labeled = [a for a in subset if a.get("target") is not None]
@@ -217,10 +223,10 @@ def render_tab_olap():
                     _fmt_cell(sub, "Unknown") for _, _, sub in active_bands
                 ] + [_fmt_cell(apps_list, "Unknown")],
                 "Tổng giá trị tín dụng": [
-                    f"{sum(a.get('credit', 0.0) * a.get('unit_scale', 1_000_000.0) / 1_000_000.0 for a in sub):,.1f}M ({len(sub)} đơn)"
+                    f"{sum((a.get('credit') or 0.0) * a.get('unit_scale', 1_000.0) / 1_000_000.0 for a in sub):,.2f}M ({len(sub)} đơn)"
                     for _, _, sub in active_bands
                 ] + [
-                    f"{sum(a.get('credit', 0.0) * a.get('unit_scale', 1_000_000.0) / 1_000_000.0 for a in apps_list):,.1f}M ({len(apps_list)} đơn)"
+                    f"{sum((a.get('credit') or 0.0) * a.get('unit_scale', 1_000.0) / 1_000_000.0 for a in apps_list):,.2f}M ({len(apps_list)} đơn)"
                 ],
                 "Tỷ lệ rủi ro (TARGET=1)": [
                     _fmt_bad_rate(sub) for _, _, sub in active_bands
