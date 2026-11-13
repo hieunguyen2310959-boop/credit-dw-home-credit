@@ -39,7 +39,7 @@ erDiagram
 
 ## Giới hạn & Triển khai Cloud
 - Hệ thống được triển khai trên **Neon Cloud** (PostgreSQL 18.6 - AWS Singapore):
-  - **Dung lượng & Dữ liệu:** Nạp đầy đủ 100% dữ liệu gốc Home Credit gồm `staging.application` (`307,511` hồ sơ), `staging.previous_application` (`1,670,214` giao dịch lịch sử) và `dw.fact_application` (`307,511` hồ sơ). Tổng dung lượng chiếm `485.36 MB` (nằm gọn trong hạn mức 1 GB, không cần truncate bất kỳ bảng staging nào).
+  - **Dung lượng & Dữ liệu:** Nạp đầy đủ dữ liệu gốc Home Credit gồm `staging.application` (`307,511` hồ sơ), `staging.previous_application` (`1,670,214` giao dịch lịch sử) và `dw.fact_application` (`307,511` hồ sơ). Tổng dung lượng chiếm `485.36 MB` (nằm trong hạn mức 1 GB, không cần truncate bảng staging).
   - **Bảo toàn dữ liệu lịch sử:** Lưu trữ nguyên vẹn toàn bộ 1.67 triệu dòng lịch sử vay tại `staging.previous_application` để phục vụ audit trail, kiểm tra chất lượng dữ liệu (Data Quality Guardrails) và tổng hợp tính toán các chỉ số hành vi tín dụng quá khứ.
   - **Bảng tác vụ ứng dụng:** Bảng `app.credit_decisions` (khởi tạo qua `sql/005_app_decisions.sql`) lưu vết nguyên tử quyết định thẩm định thực tế của cán bộ tín dụng trực tiếp trên Cloud.
 - Chưa có train/predict/API/UI trong schema DB core; dữ liệu model trong tests chỉ kiểm tra constraint.

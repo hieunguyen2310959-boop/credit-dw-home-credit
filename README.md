@@ -11,11 +11,11 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc **Star Sch
   - Thiết kế mô hình kho dữ liệu đa chiều Star Schema (Fact, Dims, Staging, Marts) theo phương pháp luận Kimball.
   - Xây dựng pipeline trích xuất - biến đổi - nạp (ETL) dạng streaming qua `COPY`, bảo toàn tính nhất quán transaction, mã băm SHA-256 manifest, khóa chống chạy đồng thời và chống nhân dòng khi nạp lại.
   - Thiết lập rào chắn kiểm soát chất lượng dữ liệu (Data Quality Guardrails): xử lý giá trị dị biệt sentinel `365243` $\rightarrow$ `NULL`, phát hiện 256,513 hồ sơ lịch sử ngoài cohort, chặn rò rỉ thông tin tương lai (`DAYS_DECISION <= 0`).
-  - Triển khai toàn bộ kho dữ liệu 100% lên **Neon Cloud DWH (PostgreSQL 18.6 - AWS Singapore)** với đầy đủ 307,511 hồ sơ hiện tại và 1,670,214 giao dịch lịch sử.
+  - Triển khai kho dữ liệu lên **Neon Cloud DWH (PostgreSQL 18.6 - AWS Singapore)** lưu trữ đầy đủ 307,511 hồ sơ hiện tại và 1,670,214 giao dịch lịch sử.
 
 - **Thành viên B — Machine Learning & Risk Scoring (Tầng Trí tuệ):**
   - Xây dựng pipeline tiền xử lý và huấn luyện mô hình Logistic Regression theo chuẩn Feature Contract v1 (ROC-AUC tập holdout đạt 0.7424).
-  - Tách biệt tuyệt đối nhãn mục tiêu (`TARGET`) và mã định danh (`SK_ID_CURR` / `application_id`) khỏi bộ thuộc tính dự báo để ngăn ngừa hoàn toàn hiện tượng rò rỉ dữ liệu (data leakage).
+  - Tách biệt nhãn mục tiêu (`TARGET`) và mã định danh (`SK_ID_CURR` / `application_id`) khỏi tập thuộc tính dự báo nhằm tránh rò rỉ dữ liệu (data leakage).
   - Thiết lập chính sách phân tầng rủi ro tín dụng (`policy_v1_illustrative`): Thấp (`< 0.20`), Trung bình (`0.20 – 0.35`), Cao (`>= 0.35`).
   - Cung cấp cơ chế giải thích mô hình (Explainable AI): phân tích đóng góp log-odds (`model_factors`) cho từng thuộc tính giúp cán bộ thẩm định hiểu rõ căn cứ ra quyết định.
   - Xây dựng gói thư viện `credit_ml` hoàn chỉnh kèm 17 unit test kiểm thử nghiêm ngặt tại `ml/tests/`.
@@ -25,7 +25,7 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc **Star Sch
   - Thiết kế giao diện thẩm định hồ sơ 360 độ (Core DSS) với đồng hồ đo rủi ro chuẩn Basel, phân tích nhân tố log-odds, đòn bẩy tài chính và lịch sử vay quá khứ.
   - Xây dựng công cụ phân tích OLAP đa chiều: hỗ trợ thao tác Roll-up, Slice & Dice trực tiếp trên toàn bộ 307,511 hồ sơ Data Mart theo 4 chiều (Độ tuổi, Hợp đồng, Nguồn thu nhập, Học vấn).
   - Phát triển công cụ mô phỏng kịch bản (What-If Simulation): cho phép cán bộ thẩm định điều chỉnh số tiền vay, thu nhập và khẩu vị rủi ro với tái chấm điểm thời gian thực bằng hàm `assess()` của ML.
-  - Thiết lập cơ chế kiểm soát an toàn **Fail-Closed**: tự động chặn quyền phê duyệt nếu xảy ra lỗi mô hình ML, ngăn ngừa phê duyệt mù quáng.
+  - Thiết lập cơ chế kiểm soát an toàn **Fail-Closed**: tự động chặn quyền phê duyệt nếu xảy ra lỗi mô hình ML, ngăn ngừa việc phê duyệt tự động khi mô hình chưa hoàn tất suy luận hợp lệ.
   - Triển khai bảng nhật ký kiểm toán `app.credit_decisions` trên Neon Cloud, đồng bộ hóa quyết định phê duyệt/từ chối kèm mã lý do chuẩn hóa thời gian thực.
   - Đóng gói bộ 35 automated test cases kiểm thử toàn diện từ logic nghiệp vụ, tính an toàn đến ma trận giao diện người dùng.
 
@@ -35,7 +35,7 @@ Hệ thống kết hợp ba phân hệ chặt chẽ theo kiến trúc **Star Sch
 
 Toàn bộ kho dữ liệu thực tế **Home Credit (307,511 hồ sơ và 1,670,214 giao dịch lịch sử)** đã được nạp hoàn chỉnh lên **Neon Cloud PostgreSQL (AWS Singapore)**, kèm sẵn tệp artifact mô hình máy học (`ml/results/models/logreg_v1_20261106/`).
 
-Do đó, người dùng **KHÔNG CẦN** cài đặt PostgreSQL cục bộ trên máy, **KHÔNG CẦN** tải 600MB dữ liệu thô từ Kaggle và **KHÔNG CẦN** chạy lại pipeline ETL. Chỉ cần 4 bước thực hiện nhanh (khoảng 2 phút):
+Do đó, người dùng **không cần** cài đặt PostgreSQL cục bộ trên máy, **không cần** tải 600MB dữ liệu thô từ Kaggle và **không cần** chạy lại pipeline ETL. Quy trình thiết lập gồm 4 bước:
 
 ### Bước 1: Tải mã nguồn về máy (Yêu cầu Python 3.12+ hoặc 3.13)
 ```powershell
@@ -119,7 +119,7 @@ flowchart TD
 
 ### Các bảng dữ liệu cốt lõi:
 1. `staging.application` (307,511 dòng): Lưu trữ dữ liệu thô của đơn xin vay hiện tại.
-2. `staging.previous_application` (1,670,214 dòng): Lưu trữ 100% lịch sử các khoản vay trước đó của khách hàng tại Home Credit.
+2. `staging.previous_application` (1,670,214 dòng): Lưu trữ toàn bộ 1,670,214 bản ghi lịch sử các khoản vay trước đó của khách hàng từ tệp `previous_application.csv`.
 3. `dw.fact_application` (307,511 dòng): Bảng Fact trung tâm, lưu các số đo tài chính (`amt_credit`, `amt_income_total`, `amt_annuity`, tỷ lệ đòn bẩy) và các thuộc tính tổng hợp từ lịch sử vay (`prev_app_count`, `prev_approved_count`, `prev_refused_count`, `prev_total_credit_approved`...).
 4. `dw.dim_applicant_profile` & `dw.dim_contract_type`: Các chiều không gian lưu thông tin khách hàng và hình thức hợp đồng.
 5. `ops.etl_runs`: Lưu trữ lịch sử thực thi ETL, mã băm SHA-256 của file nguồn, số dòng nạp và trạng thái thực thi.
@@ -139,7 +139,7 @@ Mô hình dự báo rủi ro được đóng gói tại thư mục `ml/`, tuân 
 
 ### 1. Thuộc tính & Cơ chế suy luận:
 - **Thuộc tính đầu vào:** Thu nhập (`amt_income_total`), Giá trị khoản vay (`amt_credit`), Tiền trả định kỳ (`amt_annuity`), Giá trị hàng hóa (`amt_goods_price`), Tuổi đời (`age_years`), Thời gian công tác (`employment_years`), 3 điểm tín dụng nguồn ngoài (`ext_source_1`, `ext_source_2`, `ext_source_3`), số hợp đồng vay trước đó và tỷ lệ quá hạt quá khứ.
-- **Quy tắc bảo vệ dữ liệu:** Nghiêm cấm tuyệt đối đưa cột định danh (`application_id`) hoặc nhãn thực tế (`TARGET`) vào danh sách thuộc tính suy luận.
+- **Quy tắc phân tách dữ liệu:** Loại trừ cột định danh (`application_id`) và nhãn thực tế (`TARGET`) khỏi danh sách thuộc tính suy luận.
 - **Mô hình triển khai:** Logistic Regression được chuẩn hóa qua `StandardScaler` và `SimpleImputer(strategy='median')`. Trọng số mô hình được xuất thành artifact tại `ml/results/models/logreg_v1_20261106/`.
 
 ### 2. Phân tầng Rủi ro & Chính sách Phê duyệt (`policy_v1_illustrative`):
@@ -178,7 +178,7 @@ Giao diện phân tách chi tiết từng nhân tố tác động làm tăng r�
   - Nút "Điền mẫu nhanh" tự động tổng hợp căn cứ thẩm định.
   - Nút **"LƯU QUYẾT ĐỊNH (SAVE)"** ghi dữ liệu nguyên tử vào bảng `app.credit_decisions` và `ml.assessments` trên Neon Cloud.
 - **Cơ chế An toàn Nghiêm ngặt (Fail-Closed Safety):**
-  - Nếu mô hình ML gặp sự cố ngoại lệ hoặc dữ liệu đầu vào vi phạm cấu trúc, hệ thống lập tức khóa cứng nút "Phê duyệt" và chuyển sang trạng thái cảnh báo đỏ `ML_ERROR`. Hệ thống kiên quyết không cho phép phê duyệt mù quáng khi chưa có đánh giá rủi ro hợp lệ.
+  - Nếu mô hình ML gặp sự cố ngoại lệ hoặc dữ liệu đầu vào vi phạm cấu trúc, hệ thống lập tức khóa nút "Phê duyệt" và chuyển sang trạng thái cảnh báo đỏ `ML_ERROR`. Hệ thống vô hiệu hóa chức năng phê duyệt khi chưa có kết quả đánh giá rủi ro hợp lệ từ mô hình.
 
 ### Tab 2 — Phân tích Đa chiều (OLAP Analytics)
 - Thao tác trực tiếp trên toàn bộ **307,511 hồ sơ Data Mart** của Neon Cloud.
@@ -194,7 +194,7 @@ Giao diện phân tách chi tiết từng nhân tố tác động làm tăng r�
   - Tinh chỉnh số tiền vay đề xuất (`amt_credit`) theo đơn vị nghìn đồng `K`.
   - Tinh chỉnh thu nhập khách hàng (`amt_income_total`).
   - Tinh chỉnh khẩu vị rủi ro tín dụng (`review_threshold`, `decline_threshold`).
-- Tái chấm điểm thời gian thực thông qua hàm `assess()` của gói `credit_ml` (tuyệt đối không dùng công thức giả định heuristic).
+- Tái chấm điểm thời gian thực thông qua hàm `assess()` của gói `credit_ml` (thay vì sử dụng công thức giả định heuristic).
 - Ràng buộc an toàn: hệ thống kiểm tra điều kiện logic $\text{review\_threshold} < \text{decline\_threshold}$. Nếu cán bộ kéo sai ngưỡng, hệ thống lập tức vô hiệu hóa nút tính toán và hiển thị thông báo nhắc nhở.
 - Nút **"Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt"** tự động chuyển các con số giả định sang biên bản thẩm định ở Tab 1.
 
@@ -267,15 +267,15 @@ python -m pytest ml/tests tests/test_app_safety.py tests/test_ui_matrix.py -v
 
 ### Chi tiết 3 nhóm kiểm thử:
 1. **17 Unit Tests Machine Learning (`ml/tests/test_ml.py`):**
-   - Kiểm tra bộ thuộc tính khớp chính xác 100% với Feature Contract v1.
+   - Kiểm tra bộ thuộc tính khớp với định nghĩa trong Feature Contract v1.
    - Kiểm tra chống rò rỉ nhãn: từ chối các khóa cấm (`TARGET`, `risk_score`...).
    - Kiểm tra tính bất biến của hàm What-If và sự hội tụ của log-odds.
    - Kiểm tra xử lý an toàn khi thiếu thuộc tính hoặc giá trị bất thường.
 2. **13 Tests An toàn Ứng dụng & Nghiệp vụ (`tests/test_app_safety.py`):**
    - Kiểm tra cơ chế Fail-Closed: khóa chức năng phê duyệt khi mô hình ML lỗi.
    - Kiểm tra chính sách Override: bắt buộc chuyển sang `REVIEW` khi thiếu toàn bộ 3 điểm tín dụng ngoài.
-   - Kiểm tra tính trung thực của cơ sở dữ liệu: báo lỗi thật khi kết nối DB trục trặc, tuyệt đối không báo thành công ảo.
-   - Kiểm tra giữ nguyên giá trị `NULL` cho dữ liệu tiền tệ bị khuyết (không tự ý ép về 0 gây hiểu nhầm).
+   - Kiểm tra tính trung thực của cơ sở dữ liệu: báo lỗi khi kết nối cơ sở dữ liệu gián đoạn, không ghi nhận thành công giả lập khi thao tác ghi thất bại.
+   - Kiểm tra giữ nguyên giá trị `NULL` cho dữ liệu tiền tệ bị khuyết (không tự ý ép về 0).
    - Kiểm tra nhận diện chính xác nền tảng `Neon Cloud` từ chuỗi kết nối.
 3. **5 Matrix Tests Giao diện Tương tác (`tests/test_ui_matrix.py`):**
    - Kiểm tra tương tác tìm kiếm hồ sơ và bộ lọc rủi ro trên giao diện thật qua `streamlit.testing.v1.AppTest`.
@@ -329,7 +329,7 @@ flowchart LR
 - Tại ô tìm kiếm, gõ mã hồ sơ **`100402`**:
 - Hồ sơ này có xác suất rủi ro ước lượng rất thấp ($p \approx 0.094 < 0.20$, mức `LOW`).
 - **Quy tắc bảo vệ ngân hàng kích hoạt:** Do hồ sơ này **thiếu toàn bộ 3 điểm tín dụng bên ngoài** (`EXT_SOURCE_1, 2, 3`), chính sách rủi ro `policy_v1_illustrative` tự động đè khuyến nghị sang **`REVIEW`** (hiển thị banner màu vàng với mã lý do `ALL_EXTERNAL_SCORES_MISSING`).
-- Cơ chế này chứng minh hệ thống không phê duyệt mù quáng theo điểm số thuật toán mà luôn áp dụng rào chắn kiểm soát rủi ro gian lận thực tế.
+- Cơ chế này kết hợp giữa điểm số mô hình và chính sách quản trị rủi ro để xử lý các hồ sơ thiếu dữ liệu quan trọng, tránh việc phê duyệt tự động khi chưa đủ căn cứ xác minh.
 
 ### Bước 5: Thẩm định & Lưu Quyết định vào Kho Dữ liệu Neon Cloud
 - Di chuyển xuống khung **Quyết định Tín dụng (Credit Decision Panel)**.
