@@ -41,7 +41,7 @@ Trình bày trực tiếp: 15 phút thuyết trình và 5 phút hỏi đáp. Kh�
 4. **Staging không phải toàn bộ chuỗi gốc.** SQL đã dùng BIGINT, NUMERIC, INTEGER và DOUBLE PRECISION cho nhiều cột staging. Sửa bảng mô tả chương 3.
 5. **Idempotency không phải bỏ qua checksum trùng.** Loader cùng nguồn sẽ nạp lại trong transaction và upsert DW, giữ grain/khóa/kết quả cũ. Thay nguồn bị từ chối và yêu cầu DB mới. Sửa đoạn nói tự bỏ qua nguồn giống nhau nếu đang có.
 6. **Không khẳng định view giảm tải tự động.** SQL view thông thường không lưu kết quả tính sẵn; database vẫn thực thi truy vấn bảng nền. Phân biệt view với materialized view/cache giao diện.
-7. **Trạng thái cloud phải nói đúng.** Khi triển khai trên Supabase (hạn mức 500 MB), bảng `staging.previous_application` từng được truncate để tiết kiệm bộ nhớ; khi triển khai trên Neon Cloud DWH (hạn mức 1 GB), toàn bộ 1,670,214 dòng staging được lưu trữ đầy đủ và đối soát thành công (kết quả tại `docs/evidence/live_verification.json`). Báo cáo cần ghi rõ cấu hình kho dữ liệu tương ứng.
+7. **Trạng thái kho dữ liệu Cloud.** Hệ thống triển khai trên **Neon Cloud DWH** (PostgreSQL 18.6 - AWS Singapore, hạn mức 1 GB), lưu trữ đầy đủ và toàn vẹn toàn bộ 307.511 dòng `staging.application`, 1.670.214 dòng `staging.previous_application` và 307.511 dòng `dw.fact_application`. Không cắt tỉa (truncate) dữ liệu staging; kết quả đối soát tự động được xác thực và lưu tại `docs/evidence/live_verification.json`.
 8. **Artifact path.** Đường dẫn trong repo là `ml/results/models/logreg_v1_20261106/`, không phải `ml/artifacts/...`.
 
 ### 3.2 Điều chỉnh cách diễn giải kết quả

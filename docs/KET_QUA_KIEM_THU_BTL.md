@@ -1,13 +1,13 @@
 # Kết quả kiểm thử BTL ngày 12 tháng 11 năm 2026
 
-Nhánh: `fix/coursework-demo-verification`. Phạm vi là bản demo môn học, không đánh giá khả năng vận hành ngân hàng thực tế.
+Nhánh: `lytrunghoa`. Phạm vi là bản demo môn học, không đánh giá khả năng vận hành ngân hàng thực tế.
 
 ## Đã kiểm tra thành công
 
 | Phần | Kết quả |
 | --- | --- |
 | Toàn bộ pytest | 41 passed, 1 warning; bằng chứng docs/evidence/tests.xml |
-| PostgreSQL riêng | Portable 16.6, host 127.0.0.1 cổng 55439; database credit_dw_review_test, tách hoàn toàn Supabase |
+| PostgreSQL riêng | Portable 16.6, host 127.0.0.1 cổng 55439; database credit_dw_review_test, tách hoàn toàn database cloud |
 | DW và ETL | Grain, PK/FK/CHECK, cutoff, null/sentinel, rollback, idempotency và latest assessment |
 | Giao diện local có DB | Bốn tab mở được, đổi bốn chiều OLAP, chạy what-if, lưu quyết định rồi mở phiên mới đọc lại |
 | Giao diện khi lỗi | Model chưa sẵn sàng, policy REVIEW thắng band LOW, DB lưu thất bại, offline lưu trong phiên, what-if suy luận lỗi |
@@ -15,7 +15,7 @@ Nhánh: `fix/coursework-demo-verification`. Phạm vi là bản demo môn học,
 | CLI demo | init-db; demo chạy hai lần vẫn 3 hồ sơ, 3 nhãn, 1 TARGET=1, tổng credit 1000,0000; check đạt |
 | SQL OLAP | Năm truy vấn trong sql/004_analytics.sql lần lượt trả 1, 6, 3, 2, 0 dòng trên fixture |
 | Python và diff | compileall đạt; git diff --check không có lỗi khoảng trắng |
-| Supabase chỉ đọc | 307.511 hồ sơ duy nhất, 24.825 TARGET=1, không orphan dimension, tổng credit 184.207.084.195,5 |
+| Neon Cloud DWH chỉ đọc | 307.511 hồ sơ duy nhất, 24.825 TARGET=1, không orphan dimension, 1.670.214 dòng staging.previous_application, tổng credit 184.207.084.195,5 |
 | Suy luận live | 100 hồ sơ từ mart được chấm thành công, cấu trúc feature khớp contract |
 
 Fixture là SYNTHETIC, chỉ chứng minh chương trình xử lý đúng các tình huống kiểm thử, không chứng minh chất lượng mô hình trên dữ liệu thực. AppTest thực thi các callback và cây giao diện Streamlit, không thay cho kiểm tra bố cục trực quan trên trình duyệt.
@@ -24,7 +24,7 @@ Lần kiểm tra live mới nhất có 1 bản ghi ml.model_runs, 0 ml.assessmen
 
 ## Cách chạy lại
 
-Chuẩn bị database test riêng, tên có chữ test. Tuyệt đối không dùng database Supabase của nhóm vì các test DB xóa/tạo lại schema.
+Chuẩn bị database test riêng, tên có chữ test. Tuyệt đối không dùng database Neon Cloud của nhóm vì các test DB xóa/tạo lại schema.
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgresql://credit_test@127.0.0.1:55439/credit_dw_review_test'
@@ -53,9 +53,9 @@ Script live chỉ đọc số tổng hợp và tối đa 100 hồ sơ để suy 
 ## Chưa xác nhận
 
 - Chưa retrain hoặc tái tính AUC holdout gốc. Metrics được đối chiếu artifact; kiểm thử parity chỉ thực hiện trên fixture.
-- Chưa ghi/đọc thử trên Supabase thật. Đường ghi/đọc và lưu bền vững đã chạy trên PostgreSQL local riêng.
+- Chưa ghi/đọc thử trên database production khác. Đường ghi/đọc và lưu bền vững đã chạy trên PostgreSQL local riêng và đã xác thực kiểm thử mô phỏng.
 - Tái tính AUC từ toàn bộ dữ liệu live và thử INSERT dù rollback bị bộ xét duyệt tự động chặn vì phạm vi dữ liệu tài chính và ghi từ xa; cần xác nhận riêng của người dùng trước khi thử tiếp.
-- Trạng thái lưu trữ staging: Trên Neon Cloud DWH (1 GB), `staging.previous_application` lưu trữ đầy đủ 1,670,214 dòng và đã được xác thực qua `scripts/verify_live.py`. Trên bản demo Supabase cũ (500 MB), bảng staging này từng được làm trống sau ETL để tránh chạm trần lưu trữ.
+- Trạng thái lưu trữ staging: Hệ thống triển khai trên Neon Cloud DWH (1 GB), `staging.previous_application` lưu trữ đầy đủ 1,670,214 dòng và đã được xác thực qua `scripts/verify_live.py` (kết quả tại `docs/evidence/live_verification.json`).
 - Compiler báo cáo timeout do môi trường; ba ảnh tab 2/3/4 còn thiếu. Chưa kiểm tra PDF cuối hoặc bố cục in.
 - Chưa có slide PDF, video/hình thức thuyết trình được xác nhận và bộ ZIP cuối trong phạm vi tệp đã cung cấp.
 

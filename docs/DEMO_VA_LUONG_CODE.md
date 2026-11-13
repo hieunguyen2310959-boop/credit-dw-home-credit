@@ -9,13 +9,13 @@ Hai CSV Home Credit
   → scripts/database.py đọc và nạp staging
   → sql/003_load_dw.sql làm sạch, tổng hợp lịch sử, nạp fact/dimension
   → sql/002_views.sql tạo các góc nhìn phục vụ phân tích
-  → app/data_adapter.py đọc hồ sơ từ PostgreSQL/Supabase
+  → app/data_adapter.py đọc hồ sơ từ PostgreSQL (Neon Cloud DWH)
   → ml/credit_ml/inference.py gọi mô hình đã train
   → ml/credit_ml/policy.py chuyển điểm và cảnh báo thành khuyến nghị
   → app/views/ hiển thị, mô phỏng và lưu quyết định
 ```
 
-Supabase là PostgreSQL trên cloud. Khi mở web, chương trình đọc DW đã có sẵn; không tải lại CSV hoặc train lại model. Khi không kết nối được DB, web dùng bốn hồ sơ minh họa và model thật. Quyết định offline chỉ nằm trong phiên.
+Hệ thống kết nối trực tiếp với Neon Cloud DWH (PostgreSQL 18.6 trên cloud). Khi mở web, chương trình đọc DW đã có sẵn; không tải lại CSV hoặc train lại model. Khi không kết nối được DB, web dùng bốn hồ sơ minh họa và model thật. Quyết định offline chỉ nằm trong phiên.
 
 ## 2 Thứ tự đọc code
 
@@ -40,7 +40,7 @@ Tại thư mục repo, chạy:
 
 Để dùng dữ liệu thật, tạo `.env` theo `.env.example` và điền DATABASE_URL của nhóm. Ký tự đặc biệt trong phần mật khẩu của URL phải được URL-encode. Không đưa mật khẩu lên repo hoặc slide.
 
-Nếu máy dùng database local mới, chạy `scripts/database.py init-db` để tạo bảng và view, bao gồm bảng quyết định trong `sql/005_decisions.sql`. Không chạy lệnh nạp fixture demo vào kho dữ liệu thật. Không chạy test database vào Supabase dùng chung.
+Nếu máy dùng database local mới, chạy `scripts/database.py init-db` để tạo bảng và view, bao gồm bảng quyết định trong `sql/005_decisions.sql`. Không chạy lệnh nạp fixture demo vào kho dữ liệu thật. Không chạy test database vào Neon Cloud dùng chung.
 
 Kiểm thử không cần DB:
 
@@ -67,7 +67,7 @@ Kiểm thử không cần DB:
 - Vì sao điểm LOW vẫn REVIEW? Điểm và chất lượng dữ liệu là hai yếu tố khác nhau; thiếu dữ liệu quan trọng cần người kiểm tra.
 - What-if có chứng minh giảm rủi ro thật không? Không; chỉ cho thấy model phản ứng ra sao khi thay đầu vào giả định.
 - Vì sao ml.assessments trống mà web vẫn chạy? Web chấm trực tiếp từ artifact; bản demo không tự lưu mọi lần chấm. Bảng đó là nơi lưu khi sử dụng CLI assess riêng.
-- Vì sao lịch sử staging trên cloud có sự khác biệt? Trên tài khoản Supabase 500 MB, bảng staging bị truncate sau khi đã tổng hợp vào DW để tránh quá hạn mức lưu trữ; trên tài khoản Neon Cloud 1 GB, hệ thống lưu trữ nguyên vẹn toàn bộ 1,670,214 dòng staging phục vụ kiểm toán và đối soát dữ liệu.
+- Bảng staging lịch sử được lưu trữ ra sao trên cloud? Hệ thống được triển khai trên Neon Cloud DWH (PostgreSQL 18.6, dung lượng 1 GB), cho phép lưu trữ nguyên vẹn toàn bộ 1.670.214 dòng staging lịch sử (`staging.previous_application`) mà không cần truncate, phục vụ kiểm toán, đối soát dữ liệu và phân tích chỉ số hành vi.
 
 ## 6 Phạm vi vừa đủ cho môn học
 
