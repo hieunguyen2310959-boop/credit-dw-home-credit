@@ -36,7 +36,6 @@ from app.views.tab_audit import render_tab_audit
 # ==============================================================================
 st.set_page_config(
     page_title="Home Credit DSS • Cổng Thẩm Định Tín Dụng",
-    page_icon="🏦",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -50,10 +49,10 @@ init_session_data()
 render_top_header()
 
 tab_core, tab_olap, tab_whatif, tab_audit = st.tabs([
-    "🛡️ THẨM ĐỊNH HỒ SƠ (CORE DSS)",
-    "📊 BÁO CÁO PHÂN TÍCH OLAP",
-    "🎛️ MÔ PHỎNG KỊCH BẢN (WHAT-IF)",
-    "📜 NHẬT KÝ KIỂM TOÁN & VẬN HÀNH",
+    "THẨM ĐỊNH HỒ SƠ (CORE DSS)",
+    "BÁO CÁO PHÂN TÍCH OLAP",
+    "MÔ PHỎNG KỊCH BẢN (WHAT-IF)",
+    "NHẬT KÝ KIỂM TOÁN & VẬN HÀNH",
 ])
 
 with tab_core:

@@ -51,23 +51,22 @@ def _format_queue_label(aid: str, app_record: dict) -> str:
     pd_val = app_record.get("pd")
     rec_code = app_record.get("recommendation_code", "")
     if app_record.get("ml_error") or pd_val is None or r_level == "ERROR":
-        icon = "⚠️"
+        status_dot = "●"
         pd_badge = "PD: ERROR (ML_ERROR)"
     else:
-        icon = "🟢" if r_level == "LOW" else ("🟡" if r_level == "MEDIUM" else "🔴")
+        status_dot = "●"
         pd_badge = f"PD: {float(pd_val):.3f}"
         if r_level == "LOW" and rec_code == "REVIEW":
-            icon = "🟡"
             pd_badge = f"PD: {float(pd_val):.3f} • REVIEW"
     u_sfx = app_record.get("unit_suffix", "K")
     credit_disp = _fmt_money(app_record.get("credit"), u_sfx)
     status_lbl = (
-        "✓ Đã xử lý"
+        "Đã xử lý"
         if app_record.get("status") in ("Đã xử lý", "Đã duyệt")
         else "Chờ duyệt"
     )
     return (
-        f"{icon} **#{aid} • {app_record['applicant']}** &nbsp; `{pd_badge}`\n\n"
+        f"{status_dot} **#{aid} • {app_record['applicant']}** &nbsp; `{pd_badge}`\n\n"
         f"{app_record['product']} • {credit_disp} — {status_lbl}"
     )
 
@@ -284,7 +283,7 @@ def render_kpi_ribbon():
         target_1_disp = f"{dwh['bad_loans_count']:,}"
         bad_rate = dwh["bad_rate"]
         vendor_label = get_db_vendor_label()
-        source_badge = f"🟢 Live DWH {vendor_label} (PostgreSQL)"
+        source_badge = f"● Live DWH {vendor_label} (PostgreSQL)"
         cohort_subtitle = "hồ sơ trong Kho dữ liệu"
     else:
         total_apps = len(apps)
@@ -300,7 +299,7 @@ def render_kpi_ribbon():
         bad_rate = (target_1_count / labeled_count) * 100 if labeled_count else 0.0
         labeled_count_disp = str(labeled_count)
         target_1_disp = str(target_1_count)
-        source_badge = "⚡ Dữ liệu cohort mẫu (Offline mode)"
+        source_badge = "Dữ liệu cohort mẫu (Offline mode)"
         cohort_subtitle = "hồ sơ trong cohort mẫu"
 
     c1, c2, c3, c4 = st.columns(4)
@@ -328,7 +327,7 @@ def render_kpi_ribbon():
         <span class="mono" style="font-size:1.55rem; font-weight:700; color:#0F172A;">{total_credit_disp}</span>
         <span style="font-size:0.75rem; color:#64748B;">đơn vị nguồn</span>
     </div>
-    <div style="font-size:0.7rem; color:#059669; font-weight:500; margin-top:4px;">✓ SUM(amt_credit) bảo toàn qua ETL</div>
+    <div style="font-size:0.7rem; color:#059669; font-weight:500; margin-top:4px;">SUM(amt_credit) bảo toàn qua ETL</div>
 </div>
 """,
             unsafe_allow_html=True,
@@ -430,7 +429,7 @@ def render_tab_core():
     with col_left:
         with st.container(border=True):
             st.markdown(
-                '<div class="section-title">📋 HÀNG ĐỢI THẨM ĐỊNH (QUEUE)</div>',
+                '<div class="section-title">HÀNG ĐỢI THẨM ĐỊNH (QUEUE)</div>',
                 unsafe_allow_html=True,
             )
 
@@ -503,7 +502,7 @@ def render_tab_core():
                 )
                 st.markdown(
                     f'<div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:6px; padding:4px 8px; margin:2px 0 4px 0; font-size:0.74rem; color:#065F46;">'
-                    f"✓ Tìm thấy hồ sơ <b>#{searched_id}</b> {found_src}</div>",
+                    f"Tìm thấy hồ sơ <b>#{searched_id}</b> {found_src}</div>",
                     unsafe_allow_html=True,
                 )
             elif searched_id:
@@ -544,7 +543,7 @@ def render_tab_core():
             with col_btn:
                 is_live = st.session_state.get("is_live_db", False)
                 if st.button(
-                    "➕ Nạp thêm 20 hồ sơ",
+                    "Nạp thêm 20 hồ sơ",
                     use_container_width=True,
                     disabled=not is_live,
                     help=f"Tải thêm 20 hồ sơ tiếp theo từ Kho DWH ({get_db_vendor_label()} - 307,511 hồ sơ)",
@@ -558,7 +557,7 @@ def render_tab_core():
                                 st.session_state.applications,
                                 st.session_state.get("audit_logs", []),
                             )
-                            st.toast(f"✅ Đã nạp thành công {len(more_batch)} hồ sơ mới!", icon="📥")
+                            st.toast(f"Đã nạp thành công {len(more_batch)} hồ sơ mới!")
                             st.rerun()
             with col_info:
                 dwh_label = "307.5k" if st.session_state.get("is_live_db") else "Offline"
@@ -590,7 +589,7 @@ def render_tab_core():
             st.markdown(
                 f"""
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-    <span class="section-title" style="margin-bottom:0; font-size:0.75rem; white-space:nowrap;">⚖️ QUYẾT ĐỊNH CỦA CÁN BỘ</span>
+    <span class="section-title" style="margin-bottom:0; font-size:0.75rem; white-space:nowrap;">QUYẾT ĐỊNH CỦA CÁN BỘ</span>
     <span class="mono" style="background:#DBEAFE; color:#1D4ED8; font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap;">
         Hồ sơ #{active_app['id']}
     </span>
@@ -651,7 +650,7 @@ def render_tab_core():
 
             u_sfx = active_app.get("unit_suffix", "M")
             with col_autofill:
-                if st.button("✨ Điền mẫu nhanh", use_container_width=True):
+                if st.button("Điền mẫu nhanh", use_container_width=True):
                     auto_txt = _build_autofill_note(
                         active_app,
                         chosen_decision,
@@ -681,15 +680,14 @@ def render_tab_core():
 
             col_act1, col_act2 = st.columns([1, 2.2])
             with col_act1:
-                if st.button("🎛️ Thử What-If", use_container_width=True):
+                if st.button("Thử What-If", use_container_width=True):
                     st.session_state.sim_selected_id = selected_id
                     st.toast(
-                        f"Đã chọn sẵn hồ sơ #{selected_id} trong Tab 'Mô phỏng Kịch bản (What-If)'!",
-                        icon="🎛️",
+                        f"Đã chọn sẵn hồ sơ #{selected_id} trong Tab 'Mô phỏng Kịch bản (What-If)'!"
                     )
             with col_act2:
                 if st.button(
-                    "💾 LƯU QUYẾT ĐỊNH (SAVE)",
+                    "LƯU QUYẾT ĐỊNH (SAVE)",
                     type="primary",
                     use_container_width=True,
                 ):
@@ -704,10 +702,7 @@ def render_tab_core():
                     )
                     if save_ok:
                         st.session_state.pending_clear_note = True
-                        st.toast(
-                            save_msg,
-                            icon="✅" if save_level == "success" else "⚠️",
-                        )
+                        st.toast(save_msg)
                         st.rerun()
                     else:
                         st.error(save_msg)
@@ -786,8 +781,8 @@ def render_tab_core():
                     )
             with d_col:
                 st.markdown(
-                    '<div class="section-title" style="margin-top:4px;">🧠 YẾU'
-                    " TỐ ĐÓNG GÓP LOG-ODDS CHÍNH (MODEL FACTORS):</div>",
+                    '<div class="section-title" style="margin-top:4px;">'
+                    "YẾU TỐ ĐÓNG GÓP LOG-ODDS CHÍNH (MODEL FACTORS):</div>",
                     unsafe_allow_html=True,
                 )
                 drivers_list = active_app.get("drivers") or []
@@ -844,7 +839,7 @@ def render_tab_core():
             st.markdown(
                 f"""
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-    <span class="section-title" style="margin-bottom:0;">📊 TÌNH HÌNH TÀI CHÍNH & HỆ SỐ TÍN DỤNG / THU NHẬP</span>
+    <span class="section-title" style="margin-bottom:0;">TÌNH HÌNH TÀI CHÍNH & HỆ SỐ TÍN DỤNG / THU NHẬP</span>
     <span style="background:#F1F5F9; color:#334155; font-size:0.72rem; font-weight:600; padding:2px 10px; border-radius:6px;">
         {active_app['product']} • Đơn vị nguồn ({u_sfx})
     </span>
@@ -898,7 +893,7 @@ def render_tab_core():
             with st.container(border=True):
                 st.markdown(
                     f"""
-<div class="section-title">👤 THÔNG TIN KHÁCH HÀNG</div>
+<div class="section-title">THÔNG TIN KHÁCH HÀNG</div>
 <div class="kv-row"><span class="kv-label">Độ tuổi / Nhóm:</span><span class="kv-val">{active_app['age']}</span></div>
 <div class="kv-row"><span class="kv-label">Nghề nghiệp / Thu nhập:</span><span class="kv-val">{occ_disp} ({active_app['inc_type']})</span></div>
 <div class="kv-row"><span class="kv-label">Thời gian làm việc:</span><span class="kv-val">{active_app['emp_years']}</span></div>
@@ -913,7 +908,7 @@ def render_tab_core():
             with st.container(border=True):
                 st.markdown(
                     f"""
-<div class="section-title">🏛️ LỊCH SỬ TÍN DỤNG & ĐIỂM NGUỒN NGOÀI</div>
+<div class="section-title">LỊCH SỬ TÍN DỤNG & ĐIỂM NGUỒN NGOÀI</div>
 <div class="kv-row"><span class="kv-label">Hồ sơ trước (DAYS_DECISION ≤ 0):</span><span class="kv-val mono">{active_app['hist_total']}</span></div>
 <div class="kv-row"><span class="kv-label">Đã từng được duyệt / Từ chối:</span><span class="kv-val mono"><span style="color:#059669;">{active_app['hist_app']}</span> / <span style="color:#E11D48;">{active_app['hist_ref']}</span></span></div>
 <div class="kv-row"><span class="kv-label">Tỷ lệ duyệt quá khứ:</span><span class="kv-val mono">{active_app['hist_rate']}</span></div>

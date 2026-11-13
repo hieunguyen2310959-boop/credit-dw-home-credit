@@ -15,12 +15,12 @@ def render_tab_audit():
         hdr_col, sync_col = st.columns([9.4, 2.6], gap="small")
         with hdr_col:
             st.markdown(
-                '<div class="section-title">📜 NHẬT KÝ RA QUYẾT ĐỊNH CỦA CÁN BỘ'
+                '<div class="section-title">NHẬT KÝ RA QUYẾT ĐỊNH CỦA CÁN BỘ'
                 " (AUDIT TRAIL - BẢNG APP.CREDIT_DECISIONS)</div>",
                 unsafe_allow_html=True,
             )
         with sync_col:
-            if st.button("🔄 Đồng bộ từ Cloud DWH", key="btn_sync_audit_db", use_container_width=True):
+            if st.button("Đồng bộ từ Cloud DWH", key="btn_sync_audit_db", use_container_width=True):
                 fresh_logs = fetch_audit_history_from_db()
                 if fresh_logs is not None:
                     st.session_state.audit_logs = fresh_logs
@@ -59,7 +59,7 @@ def render_tab_audit():
 
     with st.container(border=True):
         st.markdown(
-            '<div class="section-title">⚙️ GIÁM SÁT TIẾN TRÌNH ETL KHO DỮ LIỆU'
+            '<div class="section-title">GIÁM SÁT TIẾN TRÌNH ETL KHO DỮ LIỆU'
             " (OPS.ETL_RUNS - ĐỒNG BỘ TRỰC TIẾP TỪ KHO DỮ LIỆU CLOUD)</div>",
             unsafe_allow_html=True,
         )
@@ -148,7 +148,7 @@ def render_tab_audit():
                 f"""
 <div style="margin-top:14px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:12px 14px;">
     <div style="font-size:0.76rem; font-weight:700; color:#0F172A; margin-bottom:8px;">
-        🛡️ BÁO CÁO KIỂM SOÁT CHẤT LƯỢNG DỮ LIỆU ETL (DATA QUALITY &amp; CLEANING GUARDRAILS - #ETL-{real_runs[0][0]:02d})
+        BÁO CÁO KIỂM SOÁT CHẤT LƯỢNG DỮ LIỆU ETL (DATA QUALITY &amp; CLEANING GUARDRAILS - #ETL-{real_runs[0][0]:02d})
     </div>
     <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; font-size:0.75rem;">
         <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:9px 10px;">

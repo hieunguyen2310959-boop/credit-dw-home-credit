@@ -16,7 +16,7 @@ def render_tab_olap():
 
     with st.container(border=True):
         st.markdown(
-            '<div class="section-title">📊 PHÂN TÍCH ĐA CHIỀU OLAP (ROLL-UP &'
+            '<div class="section-title">PHÂN TÍCH ĐA CHIỀU OLAP (ROLL-UP &'
             " SLICE & DICE)</div>",
             unsafe_allow_html=True,
         )
@@ -175,8 +175,8 @@ def render_tab_olap():
 
     with st.container(border=True):
         st.markdown(
-            '<div class="section-title">🧮 BẢNG MA TRẬN PHÂN BỔ GIÁ TRỊ TÍN DỤNG'
-            " (CROSS-TAB MATRIX - KHO DỮ LIỆU THẬT DWH)</div>",
+            '<div class="section-title">BẢNG MA TRẬN PHÂN BỔ GIÁ TRỊ TÍN DỤNG'
+            " (CROSS-TAB MATRIX - KHO DỮ LIỆU DWH)</div>",
             unsafe_allow_html=True,
         )
         cross_tab_df = fetch_olap_cross_tab()

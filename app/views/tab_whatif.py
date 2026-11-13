@@ -127,7 +127,7 @@ def render_tab_whatif():
         if not ML_LOADED or MODEL_BUNDLE is None or assess is None or PolicyConfig is None:
             st.error("Mô hình chưa sẵn sàng (ML_ERROR). Chưa thể chạy what-if.")
         st.markdown(
-            '<div class="section-title">🎛️ MÔ PHỎNG KỊCH BẢN TÍN DỤNG WHAT-IF'
+            '<div class="section-title">MÔ PHỎNG KỊCH BẢN TÍN DỤNG WHAT-IF'
             " (SCENARIO SIMULATOR)</div>",
             unsafe_allow_html=True,
         )
@@ -254,7 +254,7 @@ def render_tab_whatif():
 
                 st.markdown(
                     f"""
-<div class="section-title">⚖️ KẾT QUẢ SO SÁNH TRƯỚC VÀ SAU MÔ PHỎNG (BEFORE VS AFTER)</div>
+<div class="section-title">KẾT QUẢ SO SÁNH TRƯỚC VÀ SAU MÔ PHỎNG (BEFORE VS AFTER)</div>
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:8px;">
     <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-top:4px solid #64748B; border-radius:10px; padding:14px;">
         <div style="font-size:0.74rem; font-weight:700; color:#475569; margin-bottom:10px;">HỒ SƠ GỐC (BEFORE)</div>
@@ -280,7 +280,7 @@ def render_tab_whatif():
 
                 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
                 if st.button(
-                    "📌 Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
+                    "Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
                     type="primary",
                     disabled=False,
                 ):
@@ -293,14 +293,13 @@ def render_tab_whatif():
                     st.session_state.pending_autofill_note = pushed
                     st.session_state.pending_sync_sim_id = sim_id
                     st.toast(
-                        f"Đã chép kịch bản của hồ sơ #{sim_id} sang Tab Thẩm định (Core DSS)!",
-                        icon="📌",
+                        f"Đã chép kịch bản của hồ sơ #{sim_id} sang Tab Thẩm định (Core DSS)!"
                     )
                     st.rerun()
             else:
                 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
                 st.button(
-                    "📌 Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
+                    "Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
                     type="primary",
                     disabled=True,
                 )
