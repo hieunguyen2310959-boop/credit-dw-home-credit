@@ -26,10 +26,10 @@ erDiagram
 | ml.model_runs | Metadata, không có model đã train trong repo |
 | ml.assessments | Nhiều lần chấm; snapshot không nhãn; score/status consistency |
 | mart.latest_assessment_v1 | Latest success, tie-break ID; không nhân dòng fact |
-| app.credit_decisions | Lưu vết quyết định thẩm định của Cán bộ (sql/005_app_decisions.sql) |
+| app.credit_decisions | Lưu vết quyết định thẩm định của Cán bộ (sql/005_decisions.sql, sql/005_app_decisions.sql) |
 
 ## Quyết định MVP
-- Tách biệt schema core (`ops`, `staging`, `dw`, `ml`, `mart`) với schema tác vụ ứng dụng (`app.credit_decisions` tại `sql/005_app_decisions.sql`) để giữ nguyên toàn bộ 8 bảng core và kiểm thử tích hợp tự động của Thành viên A.
+- Tách biệt schema core (`ops`, `staging`, `dw`, `ml`, `mart`) với schema tác vụ ứng dụng (`app.credit_decisions` tại `sql/005_decisions.sql` / `sql/005_app_decisions.sql`) để giữ nguyên toàn bộ 8 bảng core và kiểm thử tích hợp tự động của Thành viên A.
 - Cutoff previous: DAYS_DECISION <= 0. Null/future đếm riêng, không vào aggregate.
 - Approval rate = Approved / tất cả hồ sơ previous đủ cutoff. Approved+Refused có thể nhỏ hơn tổng.
 - Một dataset cố định sau lần thành công đầu. Đổi manifest thì dùng DB mới, không reset/xóa assessments cũ.

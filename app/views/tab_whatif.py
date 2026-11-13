@@ -31,13 +31,17 @@ def run_whatif_simulation(
     unit_scale: float,
     rev_thresh: float,
     dec_thresh: float,
-    ml_loaded: bool = ML_LOADED,
-    model_bundle=MODEL_BUNDLE,
-    assess_fn=assess,
-    policy_cfg_cls=PolicyConfig,
-    ml_load_error: str | None = ML_LOAD_ERROR,
+    ml_loaded: bool | None = None,
+    model_bundle=None,
+    assess_fn=None,
+    policy_cfg_cls=None,
+    ml_load_error: str | None = None,
 ) -> dict:
-    """Chạy mô phỏng What-If hoàn toàn qua credit_ml; tuyệt đối không dùng công thức heuristic thay thế."""
+    """Chạy mô phỏng What-If hoàn toàn qua credit_ml; không dùng công thức heuristic thay thế."""
+    ml_loaded = ML_LOADED if ml_loaded is None else ml_loaded
+    model_bundle = MODEL_BUNDLE if model_bundle is None else model_bundle
+    assess_fn = assess if assess_fn is None else assess_fn
+    policy_cfg_cls = PolicyConfig if policy_cfg_cls is None else policy_cfg_cls
     if rev_thresh >= dec_thresh:
         return {
             "status": "invalid_thresholds",
@@ -120,6 +124,8 @@ def run_whatif_simulation(
 def render_tab_whatif():
     """Render giao diện chính của Tab 3 (What-If Scenario Simulator)."""
     with st.container(border=True):
+        if not ML_LOADED or MODEL_BUNDLE is None or assess is None or PolicyConfig is None:
+            st.error("Mô hình chưa sẵn sàng (ML_ERROR). Chưa thể chạy what-if.")
         st.markdown(
             '<div class="section-title">🎛️ MÔ PHỎNG KỊCH BẢN TÍN DỤNG WHAT-IF'
             " (SCENARIO SIMULATOR)</div>",
@@ -219,7 +225,9 @@ def render_tab_whatif():
 
             sim_ok = sim_res["status"] == "ok"
             if not sim_ok:
-                st.error(f"⚠️ {sim_res['error']}")
+                st.error(sim_res["error"])
+                if sim_res["status"] == "ml_error":
+                    st.error("Không tính được kịch bản bằng mô hình. Kiểm tra đầu vào và thử lại.")
             elif sim_res.get("alerts"):
                 alert_codes = ", ".join(
                     str(a.get("code", a)) if isinstance(a, dict) else str(a)
@@ -229,22 +237,23 @@ def render_tab_whatif():
                     f"ℹ️ Chính sách giữ/ép trạng thái `{sim_res['new_rec']}` theo cảnh báo dữ liệu/đòn bẩy: `{alert_codes}`."
                 )
 
-            new_pd = sim_res["new_pd"]
-            delta_pd = sim_res["delta_pd"]
-            new_rec = sim_res["new_rec"]
-            rec_color = (
-                "#059669"
-                if new_rec == "APPROVE_SIMULATION"
-                else ("#D97706" if new_rec == "REVIEW" else "#E11D48")
-            )
-            after_pd_disp = (
-                f"{new_pd:.4f} ({delta_pd:+.4f})"
-                if sim_ok and new_pd is not None and delta_pd is not None
-                else "BLOCKED (ML_ERROR)"
-            )
+            if sim_ok:
+                new_pd = sim_res["new_pd"]
+                delta_pd = sim_res["delta_pd"]
+                new_rec = sim_res["new_rec"]
+                rec_color = (
+                    "#059669"
+                    if new_rec == "APPROVE_SIMULATION"
+                    else ("#D97706" if new_rec == "REVIEW" else "#E11D48")
+                )
+                after_pd_disp = (
+                    f"{new_pd:.4f} ({delta_pd:+.4f})"
+                    if new_pd is not None and delta_pd is not None
+                    else "BLOCKED (ML_ERROR)"
+                )
 
-            st.markdown(
-                f"""
+                st.markdown(
+                    f"""
 <div class="section-title">⚖️ KẾT QUẢ SO SÁNH TRƯỚC VÀ SAU MÔ PHỎNG (BEFORE VS AFTER)</div>
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:8px;">
     <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-top:4px solid #64748B; border-radius:10px; padding:14px;">
@@ -266,25 +275,32 @@ def render_tab_whatif():
     * Kết quả giả định (hypothetical), chấm trực tiếp qua pipeline credit_ml theo đúng thang đo đơn vị nguồn (unit_scale={int(unit_scale):,}x) và không ghi đè dữ liệu gốc DW.
 </div>
 """,
-                unsafe_allow_html=True,
-            )
+                    unsafe_allow_html=True,
+                )
 
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            if st.button(
-                "📌 Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
-                type="primary",
-                disabled=not sim_ok,
-            ):
-                pushed = (
-                    f"[Mô phỏng What-If Hồ sơ #{sim_id}]: Điều chỉnh tín dụng về"
-                    f" {new_credit:,.1f}{u_sfx}, thu nhập {new_income:,.1f}{u_sfx}"
-                    f" (credit_income_ratio = {new_lev:.2f}x) -> risk_score ="
-                    f" {new_pd:.4f} ({new_rec})."
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                if st.button(
+                    "📌 Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
+                    type="primary",
+                    disabled=False,
+                ):
+                    pushed = (
+                        f"[Mô phỏng What-If Hồ sơ #{sim_id}]: Điều chỉnh tín dụng về"
+                        f" {new_credit:,.1f}{u_sfx}, thu nhập {new_income:,.1f}{u_sfx}"
+                        f" (credit_income_ratio = {new_lev:.2f}x) -> risk_score ="
+                        f" {new_pd:.4f} ({new_rec})."
+                    )
+                    st.session_state.pending_autofill_note = pushed
+                    st.session_state.pending_sync_sim_id = sim_id
+                    st.toast(
+                        f"Đã chép kịch bản của hồ sơ #{sim_id} sang Tab Thẩm định (Core DSS)!",
+                        icon="📌",
+                    )
+                    st.rerun()
+            else:
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                st.button(
+                    "📌 Đẩy kết quả mô phỏng sang Ghi chú Phê duyệt",
+                    type="primary",
+                    disabled=True,
                 )
-                st.session_state.pending_autofill_note = pushed
-                st.session_state.pending_sync_sim_id = sim_id
-                st.toast(
-                    f"Đã chép kịch bản của hồ sơ #{sim_id} sang Tab Thẩm định (Core DSS)!",
-                    icon="📌",
-                )
-                st.rerun()

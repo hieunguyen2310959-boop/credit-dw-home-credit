@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def db():
     dsn = os.environ.get('TEST_DATABASE_URL')
     if not dsn:
-        pytest.fail('TEST_DATABASE_URL must name a dedicated empty database')
+        pytest.skip('TEST_DATABASE_URL must name a dedicated empty database')
     with psycopg.connect(dsn, autocommit=True) as c:
-        schemas = ['ops', 'staging', 'dw', 'ml', 'mart']
+        schemas = ['ops', 'staging', 'dw', 'ml', 'mart', 'app']
         # Only test database explicitly marked in its name is accepted.
         assert 'test' in c.info.dbname, 'Refuse to reset non-test database'
         for name in reversed(schemas):
@@ -27,6 +27,9 @@ def initialize(c):
     views = ROOT / 'sql' / '002_views.sql'
     assert views.exists(), 'Views migration is not implemented'
     c.execute(views.read_text(encoding='utf-8'))
+    decisions = ROOT / 'sql' / '005_decisions.sql'
+    if decisions.exists():
+        c.execute(decisions.read_text(encoding='utf-8'))
 
 def test_core_schema_and_views(db):
     initialize(db)
@@ -36,5 +39,6 @@ def test_core_schema_and_views(db):
     assert 'target' not in feature_cols
     assert 'application_id' in feature_cols
     assert db.execute('SELECT count(*) FROM mart.latest_assessment_v1').fetchone()[0] == 0
+    assert db.execute("SELECT to_regclass('app.credit_decisions')").fetchone()[0] is not None
     # Applying migrations twice is safe.
     initialize(db)

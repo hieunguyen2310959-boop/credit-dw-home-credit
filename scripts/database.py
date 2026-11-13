@@ -32,9 +32,11 @@ def init_db(conn):
     with conn.transaction():
         for name in ('001_schema.sql','002_views.sql'):
             conn.execute((ROOT/'sql'/name).read_text(encoding='utf-8'))
-        app_sql = ROOT / 'sql' / '005_app_decisions.sql'
-        if app_sql.exists():
-            conn.execute(app_sql.read_text(encoding='utf-8'))
+        for name in ('005_decisions.sql', '005_app_decisions.sql'):
+            app_sql = ROOT / 'sql' / name
+            if app_sql.exists():
+                conn.execute(app_sql.read_text(encoding='utf-8'))
+                break
 
 
 def parse_value(name, value):

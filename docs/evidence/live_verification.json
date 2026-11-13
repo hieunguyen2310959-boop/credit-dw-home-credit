@@ -1,0 +1,16 @@
+{
+  "warehouse": {
+    "rows": 307511,
+    "unique_ids": 307511,
+    "labeled": 307511,
+    "target_1": 24825,
+    "credit_sum": "184207084195.5000"
+  },
+  "orphan_dimensions": 0,
+  "live_profiles_scored": 100,
+  "feature_contract_match": true,
+  "staging_history_rows": 1670214,
+  "stored_model_count": 1,
+  "stored_assessment_count": 0,
+  "audit_count": 0
+}

@@ -255,7 +255,7 @@ def persist_decision(
         return (
             False,
             "error",
-            f"Ghi vào Kho dữ liệu ({vendor_label}) thất bại cho hồ sơ #{selected_id}{err_suffix}! "
+            f"Không lưu được vào Kho dữ liệu ({vendor_label}) cho hồ sơ #{selected_id}{err_suffix} (ghi thất bại)! "
             "Trạng thái hồ sơ và nhật ký kiểm toán chưa được cập nhật.",
         )
 
@@ -267,7 +267,7 @@ def persist_decision(
     return (
         True,
         "warning",
-        f"Chế độ Offline: Đã lưu tạm quyết định hồ sơ #{selected_id} trong phiên làm việc (chưa ghi vào DB).",
+        f"Chế độ Offline: Đã lưu tạm quyết định hồ sơ #{selected_id} (chỉ lưu quyết định trong phiên, chưa ghi vào DB).",
     )
 
 

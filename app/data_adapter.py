@@ -63,7 +63,7 @@ def get_db_vendor_label(dsn: str | None = None) -> str:
 FEATURE_LABELS_VI = {
     "ext_source_1": "Điểm nguồn ngoài 1 (EXT_1)",
     "ext_source_2": "Điểm nguồn ngoài 2 (EXT_2)",
-    "ext_source_3": "Điểm CIC / EXT_3",
+    "ext_source_3": "Điểm nguồn ngoài 3 (EXT_3)",
     "credit_income_ratio": "Hệ số Tín dụng / Thu nhập",
     "amt_income_total": "Tổng thu nhập khai báo",
     "amt_credit": "Giá trị tín dụng đề nghị",
@@ -93,6 +93,10 @@ def mark_ml_error(app_record: dict, error_detail: str) -> dict:
         {"code": "ML_SCORING_ERROR", "severity": "high", "message": error_detail}
     ]
     app_record["drivers"] = []
+    try:
+        st.error("Chưa tải được mô hình. Kiểm tra artifact và phiên bản thư viện trước khi chấm điểm.")
+    except Exception:
+        pass
     return app_record
 
 
