@@ -1,7 +1,5 @@
 """
-TAB 2: BÁO CÁO PHÂN TÍCH ĐA CHIỀU OLAP (ROLL-UP & SLICE & DICE)
-Hiển thị biểu đồ cột phân bổ rủi ro và bảng ma trận phân bổ giá trị tín dụng (Cross-tab matrix),
-đồng bộ động 100% với danh sách hồ sơ trong Data Mart.
+Báo cáo phân tích đa chiều OLAP: phân bổ rủi ro danh mục và ma trận chéo (Cross-tab).
 """
 
 import pandas as pd
@@ -54,7 +52,6 @@ def render_tab_olap():
             )
 
         with olap_right:
-            # Thử lấy dữ liệu thực tế từ DWH Cloud
             olap_live = fetch_olap_distribution(dim_choice, measure_choice)
 
             if olap_live:
@@ -67,7 +64,6 @@ def render_tab_olap():
                     f"⚠️ Không kết nối được {vendor_label} DWH — Biểu đồ OLAP đang tạm tính trên "
                     f"{len(apps_list)} hồ sơ trong bộ nhớ (không phản ánh toàn bộ 307,511 hồ sơ)."
                 )
-                # Fallback: Tính toán từ tập hồ sơ bộ nhớ
                 if dim_choice == "Nhóm độ tuổi (Age Band)":
                     groups = [
                         ("Nhóm <25 tuổi", [a for a in apps_list if a.get("age_band") == "<25"]),
@@ -106,7 +102,6 @@ def render_tab_olap():
                         rate = (sum(1 for a in labeled if a.get("target") == 1) / len(labeled) * 100.0) if labeled else 0.0
                         vals.append(rate)
                     elif "Tổng giá trị" in measure_choice:
-                        # Quy đổi về triệu (M) thống nhất với Live OLAP (mặc định unit_scale=1,000 khớp đơn vị K)
                         tot_m = sum(
                             (a.get("credit") or 0.0) * a.get("unit_scale", 1_000.0) / 1_000_000.0
                             for a in subset

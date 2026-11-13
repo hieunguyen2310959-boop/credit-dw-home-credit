@@ -1,7 +1,5 @@
 """
-TAB 4: NHẬT KÝ KIỂM TOÁN & VẬN HÀNH (AUDIT TRAIL & ETL RUNS)
-Lưu vết các quyết định phê duyệt/từ chối của Cán bộ (Officer) vào bảng app.credit_decisions
-và giám sát tiến trình trích xuất nạp dữ liệu ETL (ops.etl_runs).
+Nhật ký kiểm toán quyết định thẩm định và giám sát tiến trình ETL kho dữ liệu.
 """
 
 import pandas as pd
@@ -74,7 +72,6 @@ def render_tab_audit():
                 row_counts = r[4] or {}
                 manifest = r[5] or {}
 
-                # Format row counts trung thực (không điền số giả khi thiếu key)
                 in_app = row_counts.get("application_train", {}).get("input")
                 in_prev = row_counts.get("previous", {}).get("input")
                 out_dw = row_counts.get("dw", {}).get("output")
@@ -86,7 +83,6 @@ def render_tab_audit():
                 badge_bg = "#ECFDF5" if status == "succeeded" else "#FEF2F2"
                 badge_border = "#A7F3D0" if status == "succeeded" else "#FECACA"
 
-                # Hashes trung thực từ source_manifest
                 files = manifest.get("files", [])
                 h_app = str(files[0].get("sha256", ""))[:12] if len(files) > 0 and files[0].get("sha256") else "N/A"
                 h_prev = str(files[1].get("sha256", ""))[:12] if len(files) > 1 and files[1].get("sha256") else "N/A"

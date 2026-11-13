@@ -1,7 +1,5 @@
 """
-TẦNG KẾT NỐI DỮ LIỆU & MACHINE LEARNING ADAPTER (CONTRACT V1)
-Nạp model bundle từ Phân hệ Người 2 (ML), chuẩn hóa 16 predictors theo contracts/features-v1.json
-và khởi tạo phiên làm việc cho Cán bộ Thẩm định (Officer).
+Tầng tích hợp dữ liệu kho (DWH) và mô hình suy luận rủi ro tín dụng (ML Inference).
 """
 
 import os
@@ -101,7 +99,7 @@ def mark_ml_error(app_record: dict, error_detail: str) -> dict:
 
 
 def enrich_with_real_ml(app_record: dict) -> dict:
-    """Chấm điểm thực tế bằng MODEL_BUNDLE của Người 2 (fail-closed khi model lỗi/thiếu)."""
+    """Suy luận điểm rủi ro qua mô hình ML (fail-closed khi model lỗi hoặc thiếu)."""
     if not ML_LOADED or MODEL_BUNDLE is None:
         return mark_ml_error(
             app_record,
@@ -118,7 +116,6 @@ def enrich_with_real_ml(app_record: dict) -> dict:
         app_record["reason_codes"] = list(res.get("reason_codes", []))
         app_record["alerts"] = list(res.get("alerts", []))
 
-        # Đồng bộ khuyến nghị mặc định cho Panel Quyết định của Cán bộ
         rec_to_decision = {
             "APPROVE_SIMULATION": "✓ Phê duyệt",
             "REVIEW": "👁 Xem xét thêm",
@@ -129,7 +126,6 @@ def enrich_with_real_ml(app_record: dict) -> dict:
                 rec_code, "👁 Xem xét thêm"
             )
 
-        # Chuyển model_factors thật (đóng góp log-odds) sang định dạng hiển thị
         real_drivers = []
         for f in res.get("model_factors", []):
             feat_key = f["feature"]
@@ -545,8 +541,6 @@ def _row_to_app_dict(d: dict) -> dict:
     raw_annuity = float(d["amt_annuity"]) if d.get("amt_annuity") is not None else None
     raw_goods = float(d["amt_goods_price"]) if d.get("amt_goods_price") is not None else raw_credit
 
-    # Chuẩn hóa hiển thị theo đơn vị K (1K = 1,000 đơn vị nguồn) khớp SI (K=10^3, M=10^6, B=10^9)
-    # Bảo toàn None cho giá trị thiếu ("Thiếu khác 0")
     unit_scale = 1000.0
     credit_val = (raw_credit / unit_scale) if raw_credit is not None else None
     income_val = (raw_income / unit_scale) if raw_income is not None else None
@@ -922,7 +916,6 @@ def init_session_data():
             },
         }
 
-        # Ưu tiên tuyệt đối dữ liệu thật từ Cloud DWH (Neon Cloud)
         live_samples = {}
         try:
             live_samples = fetch_live_applications_sample(limit=16)
@@ -933,7 +926,6 @@ def init_session_data():
             st.session_state.applications = live_samples
             st.session_state.is_live_db = True
         else:
-            # Fallback offline khi không có kết nối DB
             st.session_state.applications = {
                 aid: enrich_with_real_ml(app_data) for aid, app_data in raw_apps.items()
             }

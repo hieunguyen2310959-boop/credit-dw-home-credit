@@ -1,6 +1,5 @@
 """
-MÔ-ĐUN GIAO DIỆN & PHONG CÁCH (ENTERPRISE BANKING STYLES)
-Chứa toàn bộ CSS tùy biến và Header ghim cố định cho toàn bộ ứng dụng.
+Cấu hình giao diện và typography cho cổng thẩm định tín dụng.
 """
 
 import streamlit as st
@@ -18,7 +17,7 @@ def inject_enterprise_css():
         color: #0F172A;
     }
 
-    /* 1. Xử lý khoảng trống trên cùng (Top Padding) */
+    /* Layout spacing */
     .block-container {
         padding-top: 0.75rem !important;
         padding-bottom: 1.5rem !important;
@@ -27,7 +26,7 @@ def inject_enterprise_css():
         max-width: 1600px !important;
     }
 
-    /* Ẩn thanh Header mặc định của Streamlit để lấy 100% khung nhìn */
+    /* Streamlit default header reset */
     header[data-testid="stHeader"] {
         height: 0px !important;
         min-height: 0px !important;
@@ -37,7 +36,7 @@ def inject_enterprise_css():
         display: none !important;
     }
 
-    /* 2. Tùy biến hệ thống Tabs thành dạng Pill Button hiện đại */
+    /* Tabs navigation */
     div[data-testid="stTabs"] > div:first-child {
         background-color: #FFFFFF;
         padding: 6px 8px;
@@ -71,12 +70,12 @@ def inject_enterprise_css():
         box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25) !important;
     }
 
-    /* Ẩn gạch chân đỏ mặc định của Streamlit Tabs */
+    /* Hide default tab indicator */
     div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] {
         display: none !important;
     }
 
-    /* 3. Tùy biến Container có viền (st.container(border=True)) */
+    /* Border container styling */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #FFFFFF;
         border: 1px solid #E2E8F0 !important;
@@ -86,12 +85,12 @@ def inject_enterprise_css():
         margin-bottom: 4px !important;
     }
 
-    /* 4. Khoảng cách dọc tiêu chuẩn giữa các phần tử - Tránh đè lên nhau */
+    /* Standard vertical spacing */
     div[data-testid="stVerticalBlock"] {
         gap: 0.72rem !important;
     }
 
-    /* 5. Nút bấm Primary chuẩn Ngân hàng */
+    /* Action buttons */
     div.stButton > button[kind="primary"] {
         background: linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%) !important;
         color: #FFFFFF !important;
@@ -115,16 +114,14 @@ def inject_enterprise_css():
         background-color: #FFFFFF !important;
     }
 
-    /* 6. Tùy biến kích thước nhãn của Input / Select / Radio */
+    /* Form labels */
     label[data-testid="stWidgetLabel"] p {
         font-size: 0.78rem !important;
         font-weight: 600 !important;
         color: #334155 !important;
     }
 
-    /* =========================================================================
-       6. ĐÓNG KHUNG TỪNG HỒ SƠ TRONG HÀNG ĐỢI (QUEUE RADIO CARDS)
-       ========================================================================= */
+    /* Queue card radio options */
     .st-key-queue_radio,
     .st-key-queue_radio > div,
     .st-key-queue_radio div[data-testid="stRadio"],
@@ -216,9 +213,7 @@ def inject_enterprise_css():
         margin-top: 3px !important;
     }
 
-    /* =========================================================================
-       7. PANEL QUYẾT ĐỊNH CỦA CÁN BỘ - 3 NÚT NẰM NGANG 1 HÀNG (HORIZONTAL)
-       ========================================================================= */
+    /* Decision button segment */
     .st-key-decision_radio,
     .st-key-decision_radio > div,
     .st-key-decision_radio div[data-testid="stRadio"],
@@ -266,7 +261,7 @@ def inject_enterprise_css():
         transition: all 0.15s ease !important;
     }
 
-    /* Ẩn hoàn toàn nút tròn radio để tạo giao diện 3 nút segment */
+    /* Radio button appearance reset */
     .st-key-decision_radio [data-testid="stRadioOption"] span,
     .st-key-decision_radio [data-testid="stRadioOption"] input,
     .st-key-decision_radio [data-testid="stRadioOption"] div[class*="e1dm8mpf4"] {
@@ -317,13 +312,13 @@ def inject_enterprise_css():
         font-weight: 700 !important;
     }
 
-    /* 8. Utility Classes & Sticky Header */
+    /* Utility classes */
     .mono {
         font-family: 'JetBrains Mono', monospace;
         font-variant-numeric: tabular-nums;
     }
 
-    /* Cố định Header khi cuộn trang */
+    /* Sticky header container */
     div[data-testid="stElementContainer"]:has(.enterprise-header),
     div[data-testid="element-container"]:has(.enterprise-header),
     div:has(> .enterprise-header) {

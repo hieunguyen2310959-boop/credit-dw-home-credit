@@ -1,7 +1,5 @@
 """
-TAB 3: MÔ PHỎNG KỊCH BẢN TÍN DỤNG (WHAT-IF ANALYSIS)
-Cho phép cán bộ thẩm định giả định thay đổi hạn mức, thu nhập và cấu hình khẩu vị rủi ro
-để quan sát sự thay đổi điểm rủi ro ML và khuyến nghị hệ thống trước khi quyết định.
+Mô phỏng kịch bản What-If: đánh giá tác động điều chỉnh hạn mức và thu nhập đến điểm rủi ro.
 """
 
 import streamlit as st

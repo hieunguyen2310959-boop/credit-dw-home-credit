@@ -1,6 +1,5 @@
 """
-TAB 1: THẨM ĐỊNH HỒ SƠ TÍN DỤNG (CORE DSS)
-Bao gồm thanh KPI Ribbon, Hàng đợi hồ sơ (Queue), Panel quyết định, Đồng hồ rủi ro Gauge và Hồ sơ 360 độ.
+Phân hệ thẩm định hồ sơ tín dụng: hàng đợi tiếp nhận, panel quyết định và hồ sơ 360 độ.
 """
 
 import html
@@ -425,7 +424,6 @@ def render_tab_core():
 
     col_left, col_right = st.columns([4.2, 7.8], gap="large")
 
-    # ================= CỘT TRÁI: HÀNG ĐỢI + QUYẾT ĐỊNH =================
     with col_left:
         with st.container(border=True):
             st.markdown(
@@ -433,7 +431,6 @@ def render_tab_core():
                 unsafe_allow_html=True,
             )
 
-            # Đồng bộ chọn hồ sơ nếu được đẩy từ Tab What-If sang
             if st.session_state.get("pending_sync_sim_id"):
                 sync_id = st.session_state.pop("pending_sync_sim_id")
                 if sync_id in st.session_state.applications:
@@ -462,7 +459,6 @@ def render_tab_core():
             clean_q = search_q.strip()
             searched_id = None
 
-            # Nếu người dùng gõ mã ID (ví dụ: 100009 hoặc #100009):
             if clean_q:
                 cand_id = clean_q.lstrip("#").strip()
                 if cand_id.isdigit():
@@ -520,7 +516,6 @@ def render_tab_core():
             def format_queue_option(aid):
                 return queue_labels.get(aid, f"#{aid}")
 
-            # Đảm bảo radio không bị lỗi out-of-bounds và ưu tiên chọn đúng hồ sơ vừa tìm
             if searched_id and searched_id in filtered_ids:
                 if st.session_state.get("queue_radio") != searched_id:
                     st.session_state.queue_radio = searched_id
@@ -528,7 +523,6 @@ def render_tab_core():
             if "queue_radio" in st.session_state and st.session_state.queue_radio not in filtered_ids:
                 st.session_state.queue_radio = filtered_ids[0]
 
-            # Cuộn độc lập cho Hàng đợi để không đẩy Panel Quyết định trôi xuống dưới
             with st.container(height=320, border=False):
                 selected_id = st.radio(
                     "Chọn hồ sơ thẩm định:",
@@ -538,7 +532,6 @@ def render_tab_core():
                     key="queue_radio",
                 )
 
-            # Nút nạp thêm hồ sơ từ Cloud DWH (phân trang trực tiếp)
             col_btn, col_info = st.columns([1.2, 0.8])
             with col_btn:
                 is_live = st.session_state.get("is_live_db", False)
@@ -571,7 +564,6 @@ def render_tab_core():
                     unsafe_allow_html=True,
                 )
 
-            # Reset ghi chú nháp và đồng bộ lựa chọn quyết định khi chuyển hồ sơ
             if selected_id != st.session_state.last_selected_id:
                 st.session_state.last_selected_id = selected_id
                 st.session_state.draft_note = ""
@@ -584,7 +576,6 @@ def render_tab_core():
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-        # Panel Quyết định của cán bộ (Ghim ngay bên dưới Queue)
         with st.container(border=True):
             st.markdown(
                 f"""
@@ -707,9 +698,7 @@ def render_tab_core():
                     else:
                         st.error(save_msg)
 
-    # ================= CỘT PHẢI: HỒ SƠ 360 ĐỘ CHI TIẾT =================
     with col_right:
-        # 1. Banner Khuyến nghị Hệ thống — BÁM SÁT POLICY (recommendation_code & alerts) + FAIL-CLOSED
         banner = _resolve_recommendation_banner(
             active_app, REVIEW_THRESHOLD, DECLINE_THRESHOLD
         )
@@ -763,7 +752,6 @@ def render_tab_core():
             unsafe_allow_html=True,
         )
 
-        # 2. Biểu đồ Gauge + Yếu tố ảnh hưởng chính (Log-Odds Contributions)
         with st.container(border=True):
             g_col, d_col = st.columns([4.8, 7.2], gap="medium")
             with g_col:
@@ -805,7 +793,6 @@ def render_tab_core():
 """
                     st.markdown(drivers_html, unsafe_allow_html=True)
 
-        # 3. Tình hình Tài chính & Tỷ số Tín dụng / Thu nhập ("Thiếu khác 0")
         with st.container(border=True):
             inc_val = active_app.get("income")
             cred_val = active_app.get("credit")
