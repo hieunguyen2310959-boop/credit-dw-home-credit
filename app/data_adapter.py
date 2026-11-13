@@ -205,6 +205,11 @@ def fetch_dwh_kpi_summary():
                 }
     except Exception:
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
     return None
 
 
@@ -290,6 +295,11 @@ def fetch_olap_distribution(dim_choice: str, measure_choice: str):
             }
     except Exception:
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -367,6 +377,11 @@ def fetch_olap_cross_tab():
             return pd.DataFrame(data)
     except Exception:
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -385,6 +400,11 @@ def fetch_etl_runs():
             return rows
     except Exception:
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _ensure_app_decisions_table(conn) -> None:
@@ -476,6 +496,11 @@ def save_audit_decision_to_db(record: dict, app_record: dict | None = None) -> b
     except Exception as exc:
         LAST_DB_ERROR = f"{type(exc).__name__}: {exc}"
         return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def fetch_audit_history_from_db():
@@ -505,6 +530,11 @@ def fetch_audit_history_from_db():
             return logs
     except Exception:
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _row_to_app_dict(d: dict) -> dict:
@@ -608,8 +638,9 @@ def fetch_live_applications_sample(limit: int = 15):
         return {}
     try:
         with conn:
-            cols = [d[0] for d in conn.execute("SELECT * FROM mart.application_overview_v1 LIMIT 0").description]
-            rows = conn.execute("SELECT * FROM mart.application_overview_v1 ORDER BY application_id LIMIT %s", (limit,)).fetchall()
+            cur = conn.execute("SELECT * FROM mart.application_overview_v1 ORDER BY application_id LIMIT %s", (limit,))
+            cols = [d[0] for d in cur.description]
+            rows = cur.fetchall()
             real_apps = {}
             for r in rows:
                 d = dict(zip(cols, r))
@@ -618,6 +649,11 @@ def fetch_live_applications_sample(limit: int = 15):
             return real_apps
     except Exception:
         return {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def fetch_application_by_id(app_id: int):
@@ -627,14 +663,20 @@ def fetch_application_by_id(app_id: int):
         return None
     try:
         with conn:
-            cols = [d[0] for d in conn.execute("SELECT * FROM mart.application_overview_v1 LIMIT 0").description]
-            row = conn.execute("SELECT * FROM mart.application_overview_v1 WHERE application_id = %s", (app_id,)).fetchone()
+            cur = conn.execute("SELECT * FROM mart.application_overview_v1 WHERE application_id = %s", (app_id,))
+            row = cur.fetchone()
             if not row:
                 return None
+            cols = [d[0] for d in cur.description]
             d = dict(zip(cols, row))
             return _row_to_app_dict(d)
     except Exception:
         return None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def fetch_live_applications_batch(limit: int = 20, offset: int = 0):
@@ -644,11 +686,12 @@ def fetch_live_applications_batch(limit: int = 20, offset: int = 0):
         return {}
     try:
         with conn:
-            cols = [d[0] for d in conn.execute("SELECT * FROM mart.application_overview_v1 LIMIT 0").description]
-            rows = conn.execute(
+            cur = conn.execute(
                 "SELECT * FROM mart.application_overview_v1 ORDER BY application_id LIMIT %s OFFSET %s",
                 (limit, offset)
-            ).fetchall()
+            )
+            cols = [d[0] for d in cur.description]
+            rows = cur.fetchall()
             res = {}
             for r in rows:
                 d = dict(zip(cols, r))
@@ -657,6 +700,11 @@ def fetch_live_applications_batch(limit: int = 20, offset: int = 0):
             return res
     except Exception:
         return {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def init_session_data():
