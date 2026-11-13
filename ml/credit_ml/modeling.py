@@ -21,7 +21,6 @@ from . import config as C
 from .features import log1p_money
 
 
-# ---------------------------------------------------------------- split
 def make_split(ids: pd.Series, y: pd.Series, seed=C.SPLIT_SEED,
                holdout=C.HOLDOUT_FRACTION, valid=C.VALID_FRACTION) -> pd.DataFrame:
     """Chia phan tang theo y, khong giao nhau. Tra ve DataFrame(application_id, split)."""
@@ -36,7 +35,6 @@ def make_split(ids: pd.Series, y: pd.Series, seed=C.SPLIT_SEED,
     return out
 
 
-# ---------------------------------------------------------------- pipeline
 def build_pipeline(C_value: float = 1.0, max_iter: int = 1000) -> Pipeline:
     pre = ColumnTransformer([
         ("num", Pipeline([("impute", SimpleImputer(strategy="median", add_indicator=True)),
@@ -62,7 +60,6 @@ def predict_score(pipe, X: pd.DataFrame) -> np.ndarray:
     return pipe.predict_proba(X[C.PREDICTORS])[:, 1]
 
 
-# ---------------------------------------------------------------- baselines
 def prior_baseline(y_train) -> DummyClassifier:
     d = DummyClassifier(strategy="prior")
     d.fit(np.zeros((len(y_train), 1)), np.asarray(y_train, dtype=int))
@@ -75,7 +72,6 @@ def ext_mean_rule_score(X: pd.DataFrame) -> np.ndarray:
     return (1.0 - m.fillna(0.5)).to_numpy()
 
 
-# ---------------------------------------------------------------- metrics
 def threshold_metrics(y, p, thr: float) -> dict:
     y = np.asarray(y, dtype=int)
     pred = (p >= thr).astype(int)

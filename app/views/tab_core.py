@@ -868,7 +868,6 @@ def render_tab_core():
                 unsafe_allow_html=True,
             )
 
-        # 4. Thông tin Khách hàng & Lịch sử Tín dụng (2 cột)
         c_demo, c_hist = st.columns(2, gap="medium")
         occ_disp = active_app.get("occupation", "Chưa khai báo (Unknown)")
         fam_disp = active_app.get("family_info", active_app["marital"])

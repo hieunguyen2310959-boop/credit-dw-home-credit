@@ -48,13 +48,13 @@ def test_ui_live_valid_and_edge_searches_and_filters() -> None:
     assert at.session_state["is_live_db"] is True
     assert len(at.session_state["applications"]) >= 16
 
-    # 1. ID with amt_annuity = NULL (#155054)
+    # Case: amt_annuity is NULL (#155054)
     at.text_input[0].set_value("155054").run()
     assert not at.exception
     assert at.session_state["queue_radio"] == "155054"
     assert at.session_state["applications"]["155054"]["annuity"] is None
 
-    # 2. ID with LOW risk_band forced to REVIEW by missing EXT scores (#100402)
+    # Case: LOW risk_band forced to REVIEW by missing EXT scores (#100402)
     at.text_input[0].set_value("100402").run()
     assert not at.exception
     assert at.session_state["queue_radio"] == "100402"
@@ -64,24 +64,24 @@ def test_ui_live_valid_and_edge_searches_and_filters() -> None:
     assert "0.094" in at.session_state["draft_note"]
     assert "REVIEW" in at.session_state["draft_note"]
 
-    # 3. Nonexistent numeric ID (#999999999)
+    # Case: Nonexistent numeric ID (#999999999)
     at.text_input[0].set_value("999999999").run()
     assert not at.exception
     assert any("999999999" in str(w.value) for w in at.warning)
 
-    # 4. Nonexistent text search & empty filter combo
+    # Case: Nonexistent text query
     at.text_input[0].set_value("khong_co_ho_so_nao_xyz").run()
     assert not at.exception
     assert any("Không có hồ sơ nào khớp bộ lọc" in str(i.value) for i in at.info)
     at.text_input[0].set_value("").run()
 
-    # 5. Load +20 batch
+    # Case: Batch pagination (+20)
     before_cnt = len(at.session_state["applications"])
     _find_btn(at, "Nạp thêm 20 hồ sơ").click().run()
     assert not at.exception
     assert len(at.session_state["applications"]) == before_cnt + 20
 
-    # 6. Filter combinations (including ERROR which has 0 rows)
+    # Case: Filter combinations
     _find_sb(at, "Mức rủi ro").set_value("ERROR").run()
     assert not at.exception
     _find_sb(at, "Trạng thái").set_value("Đã xử lý").run()

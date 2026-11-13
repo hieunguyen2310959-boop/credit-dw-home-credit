@@ -27,14 +27,14 @@ def test_demo_and_error_paths(monkeypatch):
     assert len(at.tabs) == 4
     aid = at.session_state['last_selected_id']
 
-    # Policy REVIEW phải thắng màu LOW của điểm model.
+    # Invariant: policy recommendation overrides model risk band
     record = at.session_state['applications'][aid]
     record['risk_level'] = 'LOW'
     record['recommendation_code'] = 'REVIEW'
     at.run()
     assert any('Khuyến nghị Hệ thống: Thẩm Định Bổ Sung' in x.value for x in at.markdown)
 
-    # Giả lập phiên live nhưng DB không lưu được: không cập nhật trạng thái.
+    # Invariant: failed live DB write must not update status
     at.session_state['is_live_db'] = True
     monkeypatch.setattr(core, 'save_audit_decision_to_db', lambda record: False)
     old_status = at.session_state['applications'][aid]['status']
@@ -106,7 +106,7 @@ def test_local_database_demo_end_to_end(db, loader, monkeypatch):
     next(b for b in at.button if 'SAVE' in b.label).click().run()
     assert not at.exception
     assert db.execute('SELECT count(*) FROM app.credit_decisions WHERE application_id=%s', (int(aid),)).fetchone()[0] == 1
-    # Phiên mới phải đọc lại bản ghi thật, không phụ thuộc session cũ.
+    # Invariant: fresh session re-reads persisted state from database
     fresh = AppTest.from_file(str(ROOT / 'app/main.py'), default_timeout=60).run()
     assert not fresh.exception
     assert any(x['Mã Hồ Sơ'] == '#' + aid for x in fresh.session_state['audit_logs'])

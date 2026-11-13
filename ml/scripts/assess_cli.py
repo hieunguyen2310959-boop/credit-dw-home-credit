@@ -1,4 +1,4 @@
-"""Vi du tham chieu cho nguoi 3: cham 1 ho so tu DW va ghi ml.assessments trong 1 transaction.
+"""CLI suy luận điểm rủi ro: chấm 1 hồ sơ từ mart.application_features_v1 và ghi ml.assessments.
 
   python scripts/assess_cli.py --application-id 100002 --models-root ml_outputs/models
 

@@ -455,7 +455,6 @@ def save_audit_decision_to_db(record: dict, app_record: dict | None = None) -> b
                     ),
                 )
 
-                # Lưu vết chấm điểm ML vào ml.assessments khi hồ sơ thuộc DW và đã có model_run_id đã đăng ký
                 if (
                     app_record is not None
                     and app_record.get("is_real_dwh")
@@ -737,7 +736,6 @@ def init_session_data():
                 "hist_rate": "50.0%",
                 "ext3": "0.640 (Tốt)",
                 "dpd": "Không phát sinh trễ hạn",
-                # Đúng 16 predictors theo contracts/features-v1.json & thang đo Home Credit gốc (unit_scale=1000)
                 "features": {
                     "amt_income_total": 100_000.0,
                     "amt_credit": 200_000.0,
@@ -970,7 +968,6 @@ def init_session_data():
 
 def sync_app_status_from_logs(applications: dict, audit_logs: list) -> None:
     """Đồng bộ trạng thái 'Đã xử lý' và quyết định gần nhất từ nhật ký kiểm toán sang danh sách Queue."""
-    # audit_logs đã sắp giảm dần theo thời gian/decision_id nên chỉ áp dụng bản ghi mới nhất cho mỗi ID
     seen_ids: set[str] = set()
     for log_item in audit_logs or []:
         logged_id = str(log_item.get("Mã Hồ Sơ", "")).replace("#", "").strip()
