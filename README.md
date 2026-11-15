@@ -62,8 +62,8 @@ Sao chép tệp cấu hình mẫu:
   ```
 - *Hoặc tạo tệp `.env` tại thư mục gốc dự án rồi dán trực tiếp 2 dòng kết nối Neon Cloud sau:*
   ```env
-  DATABASE_URL="postgresql://neondb_owner:npg_VKi3qTN6CZyO@ep-dry-mode-a1eqijxp.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-  DATABASE_URL_POOLED="postgresql://neondb_owner:npg_VKi3qTN6CZyO@ep-dry-mode-a1eqijxp-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+  DATABASE_URL="postgresql://neondb_owner:<YOUR_NEON_PASSWORD>@ep-dry-mode-a1eqijxp.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+  DATABASE_URL_POOLED="postgresql://neondb_owner:<YOUR_NEON_PASSWORD>@ep-dry-mode-a1eqijxp-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
   ```
 *(Hệ thống tự động nhận diện kết nối `Neon Cloud` và mở toàn bộ dữ liệu thật. Nếu chưa tạo `.env` hoặc mất mạng, ứng dụng vẫn tự mở ở **Chế độ Offline** với 4 hồ sơ mẫu chuẩn).*
 
